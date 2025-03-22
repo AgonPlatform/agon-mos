@@ -110,12 +110,16 @@ BOOL insertCharacter(char *buffer, char c, int insertPos, int len, int limit) {
 	return 0;
 }
 
-BOOL insertString(char * buffer, char * source, int sourceLen, int sourceOffset, int insertPos, int len, int limit, char addedChar) {
+int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, int insertPos, int len, int limit, char addedChar) {
+	// TODO: consider if we wish this function to understand wrapping with double-quotes
+	// This would involve inserting a starting double-quote at an appropriate offset _before_ insertPos
+	// which probably can be a separate step
 	int i;
+	int remainder = len - insertPos;
 	source += sourceOffset;
 	sourceLen -= sourceOffset;
 	if (len + sourceLen > limit) {
-		return false;
+		return insertPos;
 	}
 	if (addedChar != '\0') {
 		sourceLen++;
@@ -132,7 +136,13 @@ BOOL insertString(char * buffer, char * source, int sourceLen, int sourceOffset,
 
 	// Overwrite what's on-screen with what we are inserting
 	printf("%s", buffer + insertPos);
-	return true;
+
+	// Move cursor to the end of the inserted string
+	for (i = 0; i < remainder; i++) {
+		doLeftCursor();
+	}
+
+	return insertPos + sourceLen;
 }
 
 // Remove a character from the input string
@@ -456,7 +466,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 									if (getSystemVariable(searchTerm, &var) == 0) {
 										// Matching alias found
 										matched = true;
-										success = insertString(buffer, var->label + 6, strlen(var->label + 6), termLength, insertPos, len, limit, ' ');
+										insertPos = insertString(buffer, var->label + 6, strlen(var->label + 6), termLength, insertPos, len, limit, ' ');
 									}
 
 									if (!matched) {
@@ -466,7 +476,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 										if (cmd != NULL) {
 											// Matching command found
 											matched = true;
-											success = insertString(buffer, cmd->name, strlen(cmd->name), termLength, insertPos, len, limit, ' ');
+											insertPos = insertString(buffer, cmd->name, strlen(cmd->name), termLength, insertPos, len, limit, ' ');
 										}
 									}
 
@@ -485,15 +495,12 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 											int sourceOffset = sourceLeaf - searchTerm;
 											char * leafname = getFilepathLeafname(path);
 											matched = true;
-											success = insertString(buffer, leafname, strlen(leafname) - 4, strlen(sourceLeaf) - 5, insertPos, len, limit, isDirectory(path) ? '/' : ' ');
+											insertPos = insertString(buffer, leafname, strlen(leafname) - 4, strlen(sourceLeaf) - 5, insertPos, len, limit, isDirectory(path) ? '/' : ' ');
 										}
 									}
 									umm_free(searchTerm);
-									if (success) {
-										len = strlen(buffer);
-										insertPos = len;
-									}
 									if (matched) {
+										len = strlen(buffer);
 										break;
 									}
 								}
@@ -512,10 +519,8 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 									char * sourceLeaf = getFilepathLeafname(searchTerm);
 									int sourceOffset = sourceLeaf - searchTerm;
 									char * leafname = getFilepathLeafname(path);
-									if (insertString(buffer, leafname, strlen(leafname), strlen(sourceLeaf) - 1, insertPos, len, limit, isDirectory(path) ? '/' : ' ')) {
-										len = strlen(buffer);
-										insertPos = len;
-									}
+									insertPos = insertString(buffer, leafname, strlen(leafname), strlen(sourceLeaf) - 1, insertPos, len, limit, isDirectory(path) ? '/' : ' ');
+									len = strlen(buffer);
 								} else {
 									putch(0x07); // Beep
 								}
