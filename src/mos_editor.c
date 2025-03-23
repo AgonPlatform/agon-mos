@@ -110,38 +110,86 @@ BOOL insertCharacter(char *buffer, char c, int insertPos, int len, int limit) {
 	return 0;
 }
 
+// Insert into buffer a sub-string from `source` at `sourceOffset` of length `sourceLen` at `insertPos`
+// This will detect spaces in the source string and wrap the inserted string in double-quotes
 int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, int insertPos, int len, int limit, char addedChar) {
-	// TODO: consider if we wish this function to understand wrapping with double-quotes
-	// This would involve inserting a starting double-quote at an appropriate offset _before_ insertPos
-	// which probably can be a separate step
+	// TODO this needs to detect if we are inserting with a leading double-quote already present
+	// and if so not insert another one, and ensure we add a closing double-quote at the end
 	int i;
+	int copyOffset;
 	int remainder = len - insertPos;
+	bool hasSpace = memchr(source, ' ', sourceLen) != NULL;
+
+	// printf("\n\rinsertString: sourceLen=%d, sourceOffset=%d, insertPos=%d, len=%d, limit=%d, addedChar=%c, remainder=%d\n\r", sourceLen, sourceOffset, insertPos, len, limit, addedChar, remainder);
+
+	// adjust our source pointer to be where we want to start copying from
 	source += sourceOffset;
+	// and our length for the actual size we are going to insert
 	sourceLen -= sourceOffset;
-	if (len + sourceLen > limit) {
-		return insertPos;
-	}
+
+	// if we are adding a character, we need to account for this
 	if (addedChar != '\0') {
 		sourceLen++;
 	}
+	// do we have enough room in the buffer to insert our string?
+	if (len + sourceLen + (hasSpace ? 2 : 0) > limit) {
+		return insertPos;
+	}
 
-	// Move buffer contents to allow for new string
+	// Move characters to the right of the insertion point to allow for the insertion
+	copyOffset = sourceLen + (hasSpace ? 2 : 0);
 	for (i = len; i >= insertPos; i--) {
-		buffer[i + sourceLen] = buffer[i];
-	}
-	strncpy(buffer + insertPos, source, sourceLen - 1);
-	if (addedChar != '\0') {
-		buffer[insertPos + sourceLen - 1] = addedChar;
+		buffer[i + copyOffset] = buffer[i];
 	}
 
-	// Overwrite what's on-screen with what we are inserting
-	printf("%s", buffer + insertPos);
+	// Set the offset that we're copying into
+	copyOffset = insertPos;
+
+	// Insert an opening double-quote if we need it
+	if (hasSpace) {
+		int start = insertPos - sourceOffset;
+		for (i = insertPos + 1; i > start; i--) {
+			buffer[i] = buffer[i - 1];
+		}
+		buffer[start] = '"';
+		copyOffset++;
+	}
+
+	// Copy the source string into the buffer
+	strncpy(buffer + copyOffset, source, sourceLen - 1);
+	copyOffset += sourceLen - 1;
+
+	if (hasSpace) {
+		buffer[copyOffset] = '"';
+		copyOffset++;
+		sourceLen += 2;
+	}
+	if (addedChar != '\0') {
+		buffer[copyOffset] = addedChar;
+	}
+
+	
+	// Redraw what we've changed to the screen
+	if (hasSpace) {
+		// printf("redrawing, hasSpace: true, going left by %d, overwriting from %d\n\r", sourceOffset, insertPos - sourceOffset);
+		// printf("9876543210");
+		// Our cursor, at insertPos, needs to move back to the first double-quote we inserted
+		for (i = sourceOffset; i > 0; i--) {
+			doLeftCursor();
+		}
+		// Overwrite what's on-screen with what we are inserting
+		printf("%s", buffer + insertPos - sourceOffset);
+	} else {
+		// Overwrite what's on-screen with what we are inserting
+		printf("%s", buffer + insertPos);
+	}
 
 	// Move cursor to the end of the inserted string
 	for (i = 0; i < remainder; i++) {
 		doLeftCursor();
 	}
 
+	// Return the new insert position
 	return insertPos + sourceLen;
 }
 
@@ -439,6 +487,13 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 								}
 								termLength = buffer + insertPos - termStart;
 
+								// TODO handle double-quotes
+								// if the first character in the term is a double-quote, then we're looking for a filename
+								// and we should auto-close that double-quote on insertion
+								// we will need to _omit_ the double-quote from the term when searching for a filename
+								// if the term doesn't start with a double-quote, we need to check if the result includes a space
+								// as if so we will need to insert a double-quote at the start of the term
+
 								if (termStart == buffer + mos_strspn(buffer, "* ") && termLength == 0) {
 									// don't attempt to complete a zero-length command
 									putch(0x07); // Beep
@@ -512,6 +567,9 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 									break;
 								}
 
+								// TODO fix this - filename completion currently can return hidden files - ideally it shouldn't
+								// This may mean adding a flags option to resolvePath, allowing a flag to ignore hidden files
+								// Which may mean adding another register to the resolvepath API for flags
 								sprintf(searchTerm, "%.*s*", termLength, termStart);
 								resolveLength = bufferLength;
 								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL);
