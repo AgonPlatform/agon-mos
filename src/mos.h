@@ -69,6 +69,8 @@ int		mos_mount(void);
 
 void	mos_setupSystemVariables();
 
+void	printEscapedString(char * value);
+
 int		mos_cmdCD(char * ptr);
 int		mos_cmdCLS(char *ptr);
 int		mos_cmdCOPY(char *ptr);
