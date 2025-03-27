@@ -545,7 +545,7 @@ mos_api_editline:	LD	A, MB		; Check if MBASE is 0
 ;
 			CALL	NZ, SET_AHL24	; If it is running in classic Z80 mode, set U to MB
 ;
-			PUSH	DE		; UINT8	  flags
+			PUSH	DE		; UINT16  flags
 			PUSH	BC		; int 	  bufferLength
 			PUSH	HL		; char	* buffer
 			CALL	_mos_EDITLINE

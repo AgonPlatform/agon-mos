@@ -119,6 +119,7 @@ int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, 
 	int copyOffset;
 	int remainder = len - insertPos;
 	bool hasSpace = memchr(source, ' ', sourceLen) != NULL;
+	bool hasLeadingQuote = sourceOffset < insertPos && buffer[insertPos - sourceOffset - 1] == '"';
 
 	// printf("\n\rinsertString: sourceLen=%d, sourceOffset=%d, insertPos=%d, len=%d, limit=%d, addedChar=%c, remainder=%d\n\r", sourceLen, sourceOffset, insertPos, len, limit, addedChar, remainder);
 
@@ -137,7 +138,13 @@ int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, 
 	}
 
 	// Move characters to the right of the insertion point to allow for the insertion
-	copyOffset = sourceLen + (hasSpace ? 2 : 0);
+	copyOffset = sourceLen;
+	if (hasSpace || hasLeadingQuote) {
+		copyOffset += 1;
+		if (hasSpace) {
+			copyOffset += 1;
+		}
+	}
 	for (i = len; i >= insertPos; i--) {
 		buffer[i + copyOffset] = buffer[i];
 	}
@@ -146,7 +153,7 @@ int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, 
 	copyOffset = insertPos;
 
 	// Insert an opening double-quote if we need it
-	if (hasSpace) {
+	if (hasSpace && !hasLeadingQuote) {
 		int start = insertPos - sourceOffset;
 		for (i = insertPos + 1; i > start; i--) {
 			buffer[i] = buffer[i - 1];
@@ -159,10 +166,10 @@ int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, 
 	strncpy(buffer + copyOffset, source, sourceLen - 1);
 	copyOffset += sourceLen - 1;
 
-	if (hasSpace) {
+	if (hasSpace || hasLeadingQuote) {
 		buffer[copyOffset] = '"';
 		copyOffset++;
-		sourceLen += 2;
+		sourceLen += hasLeadingQuote ? 1 : 2;
 	}
 	if (addedChar != '\0') {
 		buffer[copyOffset] = addedChar;
@@ -325,6 +332,42 @@ BYTE handleHotkey(UINT8 fkey, char * buffer, int bufferLength, int insertPos, in
 	return 0;
 }
 
+// Find the start of a term in the buffer
+//
+const char * findTermStart(char * buffer, int insertPos, UINT16 flags) {
+	// flags potentially allow us to change behaviour
+	// for now we are hard-coded for the CLI, so first we skip leading `*` and ` ` characters
+	char * termPtr;
+	char * ptr = buffer + strspn(buffer, "* ");
+	if (*ptr == 0) {
+		return NULL;
+	}
+	termPtr = ptr;
+	
+	// and then use extractString to step through potential matches
+	while (ptr < buffer + insertPos) {
+		int result = extractString(ptr, &ptr, " ", &termPtr, EXTRACT_FLAG_INCLUDE_QUOTES);
+		if (result == MOS_BAD_STRING) {
+			// un-terminated double-quotes found
+			// ptr will still be the before start of the string, so we need to skip divider characters
+			termPtr = ptr + mos_strspn(ptr, " ");
+			break;
+		}
+	}
+
+	// If our term starts with a double quote we skip forwards past it
+	// so the auto-complete match finders don't have to
+	if (*termPtr == '"') {
+		termPtr++;
+	}
+	if (*termPtr == 0) {
+		// No term found
+		return NULL;
+	}
+
+	return termPtr;	
+}
+
 // The main line edit function
 // Parameters:
 // - buffer: Pointer to the line edit buffer
@@ -333,7 +376,7 @@ BYTE handleHotkey(UINT8 fkey, char * buffer, int bufferLength, int insertPos, in
 // Returns:
 // - The exit key pressed (ESC or CR)
 //
-UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
+UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 	BOOL	clear = flags & 0x01;		// Clear the buffer on entry
 	BOOL	enableTab = flags & 0x02;	// Enable tab completion (default off)
 	BOOL	enableHotkeys = !(flags & 0x04); // Enable hotkeys (default on)
@@ -476,34 +519,24 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 							case 0x09: if (enableTab) { // Tab completion
 								FRESULT fr;
 								char *searchTerm = NULL;
-								const char *termStart = buffer + insertPos;
+								const char *termStart; // = buffer + insertPos;
 								int termLength = 0;
 								int resolveLength;
 
-								// With tab-completion we are completing a "term" in the buffer
-								// start is last space before the insert position, end is the insert position
-								while (termStart > buffer && *(termStart - 1) != ' ') {
-									termStart--;
-								}
-								termLength = buffer + insertPos - termStart;
-
-								// TODO handle double-quotes
-								// if the first character in the term is a double-quote, then we're looking for a filename
-								// and we should auto-close that double-quote on insertion
-								// we will need to _omit_ the double-quote from the term when searching for a filename
-								// if the term doesn't start with a double-quote, we need to check if the result includes a space
-								// as if so we will need to insert a double-quote at the start of the term
-
-								if (termStart == buffer + mos_strspn(buffer, "* ") && termLength == 0) {
-									// don't attempt to complete a zero-length command
+								termStart = findTermStart(buffer, insertPos, flags);
+								if (termStart == NULL) {
+									// no term found, so beep and exit
 									putch(0x07); // Beep
 									break;
 								}
+								termLength = buffer + insertPos - termStart;
+
+								// our term is from termStart to buffer + insertPos
+								// if the term had a leading double-quote, that is one character _before_ termStart
 
 								// if we're at the start of the buffer, then we're looking for a command, or executable
-								// TODO consider skipping auto-complete for commands if there's no term yet
 								if (
-									termStart == buffer + mos_strspn(buffer, "* ") &&
+									termStart == buffer + mos_strspn(buffer, "* \"") &&
 									memchr(termStart, '/', termLength) == NULL
 								) {
 									t_mosSystemVariable *var = NULL;
@@ -560,7 +593,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 									}
 								}
 
-								// if not at start of buffer, then we're doing filename completion
+								// if we've reached here, we're looking for a filename
 								searchTerm = (char*) umm_malloc(termLength + 2);
 								if (!searchTerm) {
 									// umm_malloc failed, so no tab completion for us today

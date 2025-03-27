@@ -15,7 +15,7 @@
 #define cmd_historyWidth	255
 #define cmd_historyDepth	16
 
-UINT24	mos_EDITLINE(char * buffer, int bufferLength, UINT8 clear);
+UINT24	mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags);
 void getModeInformation();
 void readPalette(BYTE entry, BOOL wait);
 
