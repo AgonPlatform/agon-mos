@@ -157,27 +157,19 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index, BYTE f
 			break;
 		}
 
-		// set pattern to match on dir object (this is what f_findfirst does)
-		dir.pat = hasLeafname ? leafname : NULL;
-		fileResult = f_opendir(&dir, searchPath);
+		fileResult = f_findfirst(&dir, &fileinfo, searchPath, hasLeafname ? leafname : NULL);
 		while (fileResult == FR_OK) {
 			int loopPathLength = basePathLength;
-			fileResult = f_findnext(&dir, &fileinfo);
+			while (fileResult == FR_OK && fileinfo.fname[0] != '\0' && !checkAttribute(fileinfo.fattrib, flags)) {
+				// file info doesn't match our flags, so skip it
+				fileResult = f_findnext(&dir, &fileinfo);
+			}
 			if (hasLeafname && fileinfo.fname[0] == '\0') {
 				fileResult = FR_NO_FILE;
-			}
-			if (result != FR_OK) {
-				// "upgrade" result until it becomes OK
-				successIndex = prefixIndex;
-				result = fileResult;
 			}
 			if (fileResult == FR_NO_FILE) {
 				loopPathLength += strlen(leafname);
 			} else {
-				if (!checkAttribute(fileinfo.fattrib, flags)) {
-					// file doesn't match our flags, so skip it
-					continue;
-				}
 				loopPathLength += strlen(fileinfo.fname);
 			}
 			if (result != FR_OK && fileResult == FR_OK) {
@@ -186,6 +178,15 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index, BYTE f
 				*length = loopPathLength;
 			} else if (loopPathLength > *length) {
 				*length = loopPathLength;
+			}
+			if (result != FR_OK) {
+				// "upgrade" result until it becomes OK
+				successIndex = prefixIndex;
+				result = fileResult;
+			}
+			fileResult = f_findnext(&dir, &fileinfo);
+			if (fileinfo.fname[0] == '\0') {
+				break;
 			}
 		}
 		prefixIndex++;
