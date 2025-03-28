@@ -1422,13 +1422,14 @@ sub_args_contd:		PUSH	IX		; char * args
 ; IXU: Pointer to buffer to store the resolved path (optional - set to zero for length count only)
 ; DEU: Length of the resolved path buffer
 ; IYU: Pointer to a directory object to persist between calls (optional)
+; B: Flags for file attribute matching/filtering (zero to return all matches)
 ; C: Index of the resolved path (zero for first call)
 ; Returns:
 ; - A: Status code
-; - BCU: Updated index
+; - C: Updated index
 ; - DEU: Length of the resolved path
 ;
-; int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir)
+; int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir, BYTE flags)
 mos_api_resolvepath:
 			LD	(_scratchpad), BC	; Save the index
 			LD	(_scratchpad + 3), DE	; Save the length
@@ -1453,7 +1454,11 @@ $$:			LD	IX, DE
 			CALL	SET_ADE24	; dir object not zero, so set U to MB
 $$:			LD	IY, DE
 			; OK so we should now have all the addresses set up
-res_path_contd:		PUSH	IY		; DIR * dir
+res_path_contd:		LD	BC, 0		; Clear BC for flags
+			LD	A, (_scratchpad + 1)	; Get the flags byte
+			LD	C, A		; Copy to C
+			PUSH	BC		; BYTE flags
+			PUSH	IY		; DIR * dir
 			LD	IY, _scratchpad
 			PUSH	IY		; BYTE * index (scratchpad, from C on entry)
 			LD	DE, 3
@@ -1468,7 +1473,8 @@ res_path_contd:		PUSH	IY		; DIR * dir
 			POP	DE		; Length (will be replaced)
 			POP	BC		; Index (will be replaced)
 			POP	IY
-			LD	BC, (_scratchpad)	; Overwrite C with new Index
+			POP	BC
+			LD	BC, (_scratchpad)	; Overwrite C with new Index (also restores flags)
 			LD	DE, (_scratchpad + 3)	; Returned length
 			RET
 

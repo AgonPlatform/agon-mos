@@ -121,7 +121,18 @@ int getDirectoryForPath(char * srcPath, char * dir, int * length, BYTE searchInd
 	return FR_OK;
 }
 
-int getLengthForResolvedPath(char * filepath, int * length, BYTE * index) {
+bool checkAttribute(BYTE attribute, BYTE flags) {
+	if (flags & 0x80) {
+		// top bit set means we are looking for a complete flag/attribute match
+		// i.e. all requested attributes must be set.  extra attributes that may be set are ignored
+		flags = flags & (AM_ARC | AM_DIR | AM_RDO | AM_SYS | AM_HID);
+		return (flags & attribute == flags);
+	}
+	// otherwise we are excluding if one of the flags is set
+	return !(flags & attribute);
+}
+
+int getLengthForResolvedPath(char * filepath, int * length, BYTE * index, BYTE flags) {
 	DIR		dir;
 	FILINFO fileinfo;
 	int		result = FR_NO_PATH;
@@ -146,15 +157,27 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index) {
 			break;
 		}
 
-		fileResult = f_findfirst(&dir, &fileinfo, searchPath, hasLeafname ? leafname : NULL);
+		// set pattern to match on dir object (this is what f_findfirst does)
+		dir.pat = hasLeafname ? leafname : NULL;
+		fileResult = f_opendir(&dir, searchPath);
 		while (fileResult == FR_OK) {
 			int loopPathLength = basePathLength;
+			fileResult = f_findnext(&dir, &fileinfo);
 			if (hasLeafname && fileinfo.fname[0] == '\0') {
 				fileResult = FR_NO_FILE;
+			}
+			if (result != FR_OK) {
+				// "upgrade" result until it becomes OK
+				successIndex = prefixIndex;
+				result = fileResult;
 			}
 			if (fileResult == FR_NO_FILE) {
 				loopPathLength += strlen(leafname);
 			} else {
+				if (!checkAttribute(fileinfo.fattrib, flags)) {
+					// file doesn't match our flags, so skip it
+					continue;
+				}
 				loopPathLength += strlen(fileinfo.fname);
 			}
 			if (result != FR_OK && fileResult == FR_OK) {
@@ -163,15 +186,6 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index) {
 				*length = loopPathLength;
 			} else if (loopPathLength > *length) {
 				*length = loopPathLength;
-			}
-			if (result != FR_OK) {
-				// "upgrade" result until it becomes OK
-				successIndex = prefixIndex;
-				result = fileResult;
-			}
-			fileResult = f_findnext(&dir, &fileinfo);
-			if (fileinfo.fname[0] == '\0') {
-				break;
 			}
 		}
 		prefixIndex++;
@@ -197,7 +211,7 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index) {
 // FR_NO_PATH if the path was not found
 // Or an error code if an error occurred
 //
-int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir) {
+int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir, BYTE flags) {
 	int result = FR_OK;
 	DIR * localDir = NULL;
 	FILINFO fileinfo;
@@ -207,7 +221,7 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 	char * leafname = getFilepathLeafname(filepath);
 
 	if (lengthCheck) {
-		return getLengthForResolvedPath(filepath, length, NULL);
+		return getLengthForResolvedPath(filepath, length, NULL, flags);
 	}
 
 	if (dir == NULL) {
@@ -229,6 +243,15 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 			// something is broken
 			umm_free(localDir);
 			return result;
+		}
+		// check attributes, moving on next match if they don't pass
+		while (fileinfo.fname[0] != '\0' && !checkAttribute(fileinfo.fattrib, flags)) {
+			result = f_findnext(dir, &fileinfo);
+			if (result != FR_OK) {
+				// something is broken
+				umm_free(localDir);
+				return result;
+			}
 		}
 		if (fileinfo.fname[0] == '\0') {
 			// we need to move on to the next directory
@@ -283,8 +306,16 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 			result = getDirectoryForPath(filepath, searchPath, &basePathLength, prefixIndex);
 			if (result != FR_OK) break;
 
+			// We won't filter the directory path by our flags - we assume that it is
+			// a valid source as the user has explicitly specified it
+			// This would allow auto-complete to work for files in a hidden directory
+
 			result = f_findfirst(dir, &fileinfo, searchPath, leafname[0] == '\0' ? NULL : leafname);
 			prefixIndex++;
+			// Skip results that don't match flags
+			while (result == FR_OK && fileinfo.fname[0] != '\0' && !checkAttribute(fileinfo.fattrib, flags)) {
+				result = f_findnext(dir, &fileinfo);
+			}
 
 			if (result != FR_NO_PATH) {
 				found = true;
@@ -294,7 +325,7 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 					BYTE testIndex = prefixIndex;
 					int testResult = FR_NO_FILE;
 					result = FR_NO_FILE;
-					testResult = getLengthForResolvedPath(filepath, &newLength, &testIndex);
+					testResult = getLengthForResolvedPath(filepath, &newLength, &testIndex, flags);
 					if (testResult == FR_OK) {
 						// skip to match, and loop back around to fill in result
 						if (testIndex >= prefixIndex) {
@@ -421,14 +452,14 @@ bool isMoslet(char * filepath) {
 // Calling function is responsible for freeing the resolvedPath
 int getResolvedPath(char * source, char ** resolvedPath) {
 	int length = 0;
-	int result = resolvePath(source, NULL, &length, NULL, NULL);
+	int result = resolvePath(source, NULL, &length, NULL, NULL, 0);
 	if (result == FR_OK || result == FR_NO_FILE) {
 		length++;
 		*resolvedPath = umm_malloc(length);
 		if (*resolvedPath == NULL) {
 			return MOS_OUT_OF_MEMORY;
 		}
-		result = resolvePath(source, *resolvedPath, &length, NULL, NULL);
+		result = resolvePath(source, *resolvedPath, &length, NULL, NULL, 0);
 	}
 	return result;
 }

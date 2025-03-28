@@ -569,7 +569,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 									}
 
 									if (!matched) {
-										// Find command in runpath, or given path
+										// Find command in runpath, or given path - omitting hidden/system files
 										// TODO think more on this `:` detection once we support runtypes
 										if (memchr(termStart, ':' , termLength) != NULL) {
 											sprintf(searchTerm, "%.*s*.bin", termLength, termStart);
@@ -577,7 +577,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 											sprintf(searchTerm, "run:%.*s*.bin", termLength, termStart);
 										}
 										resolveLength = bufferLength;
-										fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL);
+										fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS);
 										if (fr == FR_OK) {
 											char * sourceLeaf = getFilepathLeafname(searchTerm);
 											int sourceOffset = sourceLeaf - searchTerm;
@@ -600,12 +600,10 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 									break;
 								}
 
-								// TODO fix this - filename completion currently can return hidden files - ideally it shouldn't
-								// This may mean adding a flags option to resolvePath, allowing a flag to ignore hidden files
-								// Which may mean adding another register to the resolvepath API for flags
 								sprintf(searchTerm, "%.*s*", termLength, termStart);
 								resolveLength = bufferLength;
-								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL);
+								// Find file, omitting hidden/system files
+								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS);
 								if (fr == FR_OK) {
 									char * sourceLeaf = getFilepathLeafname(searchTerm);
 									int sourceOffset = sourceLeaf - searchTerm;

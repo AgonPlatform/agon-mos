@@ -10,7 +10,7 @@ BOOL isDirectory(char *path);
 char * getFilepathPrefixEnd(char * filepath);
 char * getFilepathLeafname(char * filepath);
 int getDirectoryForPath(char * srcPath, char * dir, int * length, BYTE index);
-int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir);
+int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir, BYTE flags);
 int resolveRelativePath(char * path, char * resolved, int length);
 bool isMoslet(char * filepath);
 int getResolvedPath(char * source, char ** resolvedPath);

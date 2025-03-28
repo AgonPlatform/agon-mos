@@ -924,7 +924,7 @@ int mos_cmdIFTHERE(char * ptr) {
 		result = FR_INVALID_PARAMETER;
 	} else {
 		// check if the file exists
-		result = resolvePath(filepath, NULL, &pathLength, NULL, NULL);
+		result = resolvePath(filepath, NULL, &pathLength, NULL, NULL, 0);
 	}
 	umm_free(filepath);
 
@@ -1108,7 +1108,10 @@ int mos_cmdDEL(char * ptr) {
 	BYTE	index = 0;
 
 	fr = extractString(ptr, &ptr, NULL, &filename, EXTRACT_FLAG_AUTO_TERMINATE);
-
+	
+	// TODO consider supporting more flags to control the behaviour of DEL
+	// For example we could change default behaviour to _not_ work with system/hidden files
+	// and have flags to permit them to be deleted
 	if (fr == FR_OK && (strcasecmp(filename, "-f") == 0)) {
 		force = TRUE;
 		fr = extractString(ptr, &ptr, NULL, &filename, EXTRACT_FLAG_AUTO_TERMINATE);
@@ -1125,7 +1128,7 @@ int mos_cmdDEL(char * ptr) {
 	}
 
 	// Work out our maximum path length
-	fr = resolvePath(filename, NULL, &maxLength, NULL, NULL);
+	fr = resolvePath(filename, NULL, &maxLength, NULL, NULL, 0);
 	if (!(fr == FR_OK || fr == FR_NO_FILE)) {
 		return fr;
 	}
@@ -1137,7 +1140,7 @@ int mos_cmdDEL(char * ptr) {
 	*resolvedPath = '\0';
 
 	length = maxLength;
-	fr = resolvePath(filename, resolvedPath, &length, &index, &dir);
+	fr = resolvePath(filename, resolvedPath, &length, &index, &dir, 0);
 	unlinkResult = fr;
 
 	while (fr == FR_OK) {
@@ -1171,7 +1174,7 @@ int mos_cmdDEL(char * ptr) {
 		// On any unlink error, break out of the loop
 		if (unlinkResult != FR_OK) break;
 		length = maxLength;
-		fr = resolvePath(filename, resolvedPath, &length, &index, &dir);
+		fr = resolvePath(filename, resolvedPath, &length, &index, &dir, 0);
 	}
 
 	umm_free(resolvedPath);
@@ -2389,7 +2392,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 		addSlash = dstPath[strlen(dstPath) - 1] != '/';
 	}
 
-	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL);
+	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, 0);
 	if (fr != FR_OK) {
 		// source couldn't be resolved, so no file to move
 		umm_free(resolvedDestPath);
@@ -2402,7 +2405,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 	}
 
 	length = maxLength;
-	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir);
+	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
 	renResult = fr;
 
 	while (fr == FR_OK) {
@@ -2423,7 +2426,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 		if (usePattern && targetIsDir) {
 			// get next matching source, if there is one
 			length = maxLength;
-			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir);
+			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
 		} else {
 			break;
 		}
@@ -2502,7 +2505,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 		addSlash = dstPath[strlen(dstPath) - 1] != '/';
 	}
 
-	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL);
+	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, 0);
 	if (fr != FR_OK) {
 		// we only support copying files - a resolved source path returning `no file` or `no path` is an error
 		umm_free(resolvedDestPath);
@@ -2515,7 +2518,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 	}
 
 	length = maxLength;
-	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir);
+	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
 	copyResult = fr;
 
 	while (fr == FR_OK) {
@@ -2545,7 +2548,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 		if (usePattern && targetIsDir) {
 			// get next matching source, if there is one
 			length = maxLength;
-			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir);
+			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
 		} else {
 			break;
 		}
