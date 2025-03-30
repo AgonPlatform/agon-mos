@@ -370,6 +370,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 		} else {
 			extension++;
 			sprintf(token, "Alias$@%sType_%s", run ? "Run" : "Load", extension);
+			// TODO consolidate alias handling here with alias handling in mos_exec
 			runtype = expandVariableToken(token);
 			umm_free(token);
 			if (runtype != NULL) {
@@ -453,6 +454,7 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			cmdLen--;
 		} else {
 			// Check if this command has an alias
+			// TODO consolidate alias handling with mos_runOrLoadFile
 			aliasToken = umm_malloc(cmdLen + 7);
 			if (aliasToken == NULL) {
 				return MOS_OUT_OF_MEMORY;
@@ -463,18 +465,30 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			}
 			if (getSystemVariable(aliasToken, &alias) == 0) {
 				char * aliasTemplate;
+				char * expandedAlias;
+				char * commandEnd;
 				umm_free(aliasToken);
 				aliasTemplate = expandVariable(alias, false);
 				if (!aliasTemplate) {
 					return FR_INT_ERR;
 				}
-				command = substituteArguments(aliasTemplate, ptr, false);
+				expandedAlias = substituteArguments(aliasTemplate, ptr, false);
 				umm_free(aliasTemplate);
-				if (!command) {
+				if (!expandedAlias) {
 					return FR_INT_ERR;
 				}
-				result = mos_exec(command, in_mos, depth + 1);
-				umm_free(command);
+				commandEnd = expandedAlias;
+				while (*commandEnd != '\0') {
+					result = extractString(commandEnd, &commandEnd, "\r", &command, EXTRACT_FLAG_OMIT_LEADSKIP | EXTRACT_FLAG_INCLUDE_QUOTES | EXTRACT_FLAG_AUTO_TERMINATE);
+					if (result != FR_OK) {	// Failed to extract a command
+						break;
+					}
+					result = mos_exec(command, in_mos, depth + 1);
+					if (result != FR_OK) {	// Failed to execute the command
+						break;
+					}
+				}
+				umm_free(expandedAlias);
 				return result;
 			}
 
