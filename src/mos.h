@@ -58,7 +58,7 @@ void 	mos_error(int error);
 BYTE	mos_getkey(void);
 UINT24	mos_input(char * buffer, int bufferLength);
 t_mosCommand	*mos_getCommand(char * ptr, uint8_t flags);
-char *	mos_trim(char * s, bool removeLeadingAsterisks);
+char *	mos_trim(char * s, bool removeLeadingAsterisks, bool removeTrailingSpaces);
 int		mos_runBin(UINT24 addr, char * args);
 int		mos_runBinFile(char * filepath, char * args);
 int		mos_runOrLoadFile(char * args, bool run);

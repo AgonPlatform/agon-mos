@@ -109,7 +109,7 @@ static t_mosCommand mosCommands[] = {
 	{ "IfThere",	&mos_cmdIFTHERE,	false,	HELP_IFTHERE_ARGS,	HELP_IFTHERE },
 	{ "JMP",		&mos_cmdJMP,		true,	HELP_JMP_ARGS,		HELP_JMP },
 	{ "Load",		&mos_cmdLOAD,		true,	HELP_LOAD_ARGS,		HELP_LOAD },
-	{ "LoadFile",	&mos_cmdLOADFILE,	true,	HELP_LOADFILE_ARGS,	HELP_LOADFILE },
+	{ "LoadFile",	&mos_cmdLOADFILE,	false,	HELP_LOADFILE_ARGS,	HELP_LOADFILE },
 	{ "LS",			&mos_cmdDIR,		true,	HELP_CAT_ARGS,		HELP_CAT },
 	{ "Mem",		&mos_cmdMEM,		false,	NULL,				HELP_MEM },
 	{ "MkDir",		&mos_cmdMKDIR,		true,	HELP_MKDIR_ARGS,	HELP_MKDIR },
@@ -122,7 +122,7 @@ static t_mosCommand mosCommands[] = {
 	{ "RM",			&mos_cmdDEL,		true,	HELP_DELETE_ARGS,	HELP_DELETE },
 	{ "Run",		&mos_cmdRUN,		true,	HELP_RUN_ARGS,		HELP_RUN },
 	{ "RunBin",		&mos_cmdRUNBIN,		true,	HELP_RUNBIN_ARGS,	HELP_RUNBIN },
-	{ "RunFile",	&mos_cmdRUNFILE,	true,	HELP_RUNFILE_ARGS,	HELP_RUNFILE },
+	{ "RunFile",	&mos_cmdRUNFILE,	false,	HELP_RUNFILE_ARGS,	HELP_RUNFILE },
 	{ "Save",		&mos_cmdSAVE,		true,	HELP_SAVE_ARGS,		HELP_SAVE },
 	{ "Set",		&mos_cmdSET,		false,	HELP_SET_ARGS,		HELP_SET },
 	{ "SetEval",	&mos_cmdSETEVAL,	false,	HELP_SETEVAL_ARGS,	HELP_SETEVAL },
@@ -236,14 +236,15 @@ t_mosCommand *mos_getCommand(char * ptr, uint8_t flags) {
 }
 
 // String trim function
-// NB: This also includes the asterisk character as whitespace
+// Whitespace that is not a space character will always be removed from end of string
 // Parameters:
 // - s: Pointer to the string to trim
 // - removeLeadingAsterisks: If true, remove leading asterisks
+// - removeTrailingSpaces: If true, remove trailing spaces
 // Returns:
 // - s: Pointer to the start of the new string
 //
-char * mos_trim(char * s, bool removeLeadingAsterisks) {
+char * mos_trim(char * s, bool removeLeadingAsterisks, bool removeTrailingSpaces) {
 	char * ptr;
 
 	if (!s) {					// Return NULL if a null string is passed
@@ -258,7 +259,7 @@ char * mos_trim(char * s, bool removeLeadingAsterisks) {
 	}
 	// strip trailing spaces
 	ptr = s + strlen(s) - 1;
-	while (ptr > s && isspace(*ptr)) {
+	while (ptr > s && isspace(*ptr) && (removeTrailingSpaces || *ptr != ' ')) {
 		ptr--;
 	}
 	ptr[1] = '\0';
@@ -326,16 +327,23 @@ int mos_runBinFile(char * filepath, char * args) {
 // runOrLoadFile needs to be called with args _including_ the filepath
 int mos_runOrLoadFile(char * ptr, bool run) {
 	char *	filepath = NULL;
-	char *	args = NULL;
+	char * 	cmdFile = NULL;
+	char *	cmdFileEnd = NULL;
 	char * 	leafname = NULL;
 	char *	resolvedPath = NULL;
 	char *	extension = NULL;
-	int		result = extractString(ptr, &args, NULL, &filepath, EXTRACT_FLAG_AUTO_TERMINATE);
+	int		result = extractString(ptr, &cmdFileEnd, NULL, &cmdFile, 0);
 
 	if (result != FR_OK) {
 		return result;
 	}
+	filepath = umm_malloc(cmdFileEnd - cmdFile + 1);
+	if (filepath == NULL) {
+		return MOS_OUT_OF_MEMORY;
+	}
+	sprintf(filepath, "%.*s", cmdFileEnd - cmdFile, cmdFile);
 	result = getResolvedPath(filepath, &resolvedPath);
+	umm_free(filepath);
 
 	#if DEBUG > 0
 	createOrUpdateSystemVariable(run ? "LastFile$RunPath" : "LastFile$LoadPath", MOS_VAR_STRING, filepath);
@@ -362,9 +370,6 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 		} else {
 			extension++;
 			sprintf(token, "Alias$@%sType_%s", run ? "Run" : "Load", extension);
-			if (args && *(args - 1) == '\0') {
-				*(args - 1) = ' ';	// Replace the terminator with a space
-			}
 			runtype = expandVariableToken(token);
 			umm_free(token);
 			if (runtype != NULL) {
@@ -403,17 +408,12 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 		return MOS_TOO_DEEP;
 	}
 
-	ptr = mos_trim(buffer, true);
+	ptr = mos_trim(buffer, true, false);
 	if (ptr != NULL && (*ptr == '#' || *ptr == '\0' || (*ptr == '|' && *(ptr+1) == ' '))) {
 		return FR_OK;
 	}
 
-	// TODO the code here to separate command from arguments needs reworking
-	// it has become messy, especially with the addition of quoted strings
-	// Will be revisited when we have runtypes, as they will require a different interpretation of `.`
-	// With runtypes, we can look to see if we have a command terminated by `.`, and if so
-	// if the argument does not start with a space, and matches a runtype, then we can run the command
-
+	// TODO consider reworking this code, as it is possibly a bit too convoluted
 	if (ptr != NULL) {
 		int (*func)(char * ptr);
 		t_mosCommand *cmd;
@@ -424,6 +424,7 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 		char * args = NULL;
 		int cmdLen = 0;
 
+		// Find commandPtr, our potential command
 		result = extractString(ptr, &ptr, " .", &commandPtr, EXTRACT_FLAG_OMIT_LEADSKIP | EXTRACT_FLAG_INCLUDE_QUOTES);
 		if (result == FR_INVALID_PARAMETER && *commandPtr == '.') {
 			// single dot (which is interpreted as an empty string) is a valid command
@@ -438,12 +439,11 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 		}
 		cmdLen = ptr - commandPtr;
 		if (*commandPtr == '"' && *(ptr - 1) == '"') {
-			// We have a quoted command, so strip the quotes
+			// We have a quoted command, so skip the quotes
 			commandPtr++;
-			*(ptr - 1) = '\0';
 			cmdLen -= 2;
 		}
-		ptr = mos_trim(ptr, false);
+		ptr = mos_trim(ptr, false, false);
 		// ptr will now point to the arguments
 		// printf("command is '%.*s', args '%s', cmdLen %d\n\r", cmdLen, commandPtr, ptr ? ptr : "<not found>", cmdLen);
 
@@ -485,14 +485,12 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 		if (command == NULL) {
 			return MOS_OUT_OF_MEMORY;
 		}
-		strncpy(command, commandPtr, cmdLen);
-		command[cmdLen] = '\0';
+		sprintf(command, "%.*s", cmdLen, commandPtr);
 		// printf("searching for command '%s' (cmdLen is %d)\n\r", command, cmdLen);
 
 		cmd = mos_getCommand(command, MATCH_COMMANDS);
 		umm_free(command);
-		command = commandPtr;
-		func = cmd->func;
+		func = cmd ? cmd->func : NULL;
 		if (cmd != NULL && func != 0) {
 			if (cmd->expandArgs) {
 				args = expandMacro(ptr);
@@ -506,10 +504,11 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 		} else {
 			// Command not built-in, so see if it's a file
 			char * path;
+			bool useWildcard = false;
 			// OK - with the logic as it was, `./` would match an arbitrary moslet
 			// this is not what we want
 			// and `./filename.bin` would fail to find the file to run it
-			if (*command == '.') {
+			if (*commandPtr == '.') {
 				// Single dot can't match
 				// printf("cmdLen is 1\n\r");
 				return MOS_INVALID_COMMAND;
@@ -523,25 +522,22 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 				// Out of memory, but report it as an invalid command
 				return MOS_INVALID_COMMAND;
 			}
-			if (*(command + cmdLen - 1) == '.') {
+			if (*(commandPtr + cmdLen - 1) == '.') {
 				// If we have a trailing dot on our command, replace with * for wilcard matching
-				*(command + cmdLen - 1) = '*';
+				useWildcard = true;
+				cmdLen--;
 			}
-			// TODO when we have support for runtypes, we should omit the ".bin" extension
-			// and use `runFile` instead of `runBinFile`
-			if (memchr(command, ':', cmdLen) != NULL) {
+			// .bin files can be run as commands, without an extension - check for them (does not use runtype)
+			if (memchr(commandPtr, ':', cmdLen) != NULL) {
 				// Command has a path prefix, so we use it as-is
-				sprintf(path, "%.*s.bin", cmdLen, command);
+				sprintf(path, "%.*s%s.bin", cmdLen, commandPtr, useWildcard ? "*" : "");
 			} else {
 				// If "in_mos" is true we use full run path, otherwise restrict to moslets only
-				sprintf(path, "%s:%.*s.bin", in_mos ? "run" : "moslet", cmdLen, command);
+				sprintf(path, "%s:%.*s%s.bin", in_mos ? "run" : "moslet", cmdLen, commandPtr, useWildcard ? "*" : "");
 			}
 
-			// expand any variables in our arguments, if we can
+			// expand any variables in our arguments, if we can, and run the command
 			args = expandMacro(ptr);
-
-			// Once we have runtype support we should `runFile`
-			// Run the command as a binary file
 			result = mos_runBinFile(path, args ? args : ptr);
 
 			if (result == FR_NO_FILE || result == FR_NO_PATH || result == FR_DISK_ERR) {
@@ -549,6 +545,18 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			}
 			umm_free(path);
 			if (args) umm_free(args);
+
+			// Try to use RunFile on the CLI value - disabled for OSCLI, and no runpath searching
+			if (result == MOS_INVALID_COMMAND && in_mos) {
+				// reinstate opening double-quote if there was one
+				if (commandPtr > buffer && *(commandPtr - 1) == '"') {
+					commandPtr--;
+				}
+				result = mos_runOrLoadFile(commandPtr, true);
+			}
+			if (result == FR_NO_FILE || result == FR_NO_PATH || result == FR_DISK_ERR) {
+				result = MOS_INVALID_COMMAND;
+			}
 		}
 	}
 	return result;
@@ -783,7 +791,7 @@ int mos_cmdHOTKEY(char *ptr) {
 		return FR_OK;
 	}
 
-	ptr = mos_trim(ptr, false);
+	ptr = mos_trim(ptr, false, false);
 
 	if (fn_number < 1 || fn_number > 12) {
 		return FR_INVALID_PARAMETER;
@@ -1222,7 +1230,8 @@ int mos_cmdRUN(char *ptr) {
 	if (!extractNumber(ptr, &ptr, NULL, (int *)&addr, 0)) {
 		addr = MOS_defaultLoadAddress;
 	}
-	ptr = mos_trim(ptr, false);
+	// For compatibility we will trim trailing spaces from arguments
+	ptr = mos_trim(ptr, false, true);
 	result = mos_runBin(addr, ptr);
 	return result;
 }
@@ -1240,7 +1249,8 @@ int mos_cmdRUNBIN(char *ptr) {
 	if (result != FR_OK) {
 		return result;
 	}
-	ptr = mos_trim(ptr, false);
+	// For compatibility we will trim trailing spaces from arguments
+	ptr = mos_trim(ptr, false, true);
 	return mos_runBinFile(filename, ptr);
 }
 
@@ -1332,7 +1342,7 @@ int mos_cmdSET(char * ptr) {
 		return result;
 	}
 
-	mos_trim(ptr, false);
+	mos_trim(ptr, false, false);
 	if (*ptr == '\0') {
 		return FR_INVALID_PARAMETER;
 	}
@@ -3139,7 +3149,7 @@ int writeVDPSetting(char * buffer, int setting) {
 	int value;
 	char * buffEnd = buffer + strlen(buffer);
 
-	if (!extractNumber(buffer, &buffEnd, NULL, &value, 0)) {
+	if (!extractNumber(buffer, NULL, NULL, &value, 0)) {
 		return FR_INVALID_PARAMETER;
 	}
 

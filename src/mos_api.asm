@@ -1892,7 +1892,7 @@ ffs_api_mount:
 			JP mos_api_not_implemented
 ffs_api_mkfs:
 			JP mos_api_not_implemented
-ffs_api_fdisk
+ffs_api_fdisk:
 			JP mos_api_not_implemented
 ffs_api_getfree:
 			JP mos_api_not_implemented
