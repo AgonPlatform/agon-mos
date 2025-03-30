@@ -110,29 +110,94 @@ BOOL insertCharacter(char *buffer, char c, int insertPos, int len, int limit) {
 	return 0;
 }
 
-BOOL insertString(char * buffer, char * source, int sourceLen, int sourceOffset, int insertPos, int len, int limit, char addedChar) {
+// Insert into buffer a sub-string from `source` at `sourceOffset` of length `sourceLen` at `insertPos`
+// This will detect spaces in the source string and wrap the inserted string in double-quotes
+int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, int insertPos, int len, int limit, char addedChar) {
+	// TODO this needs to detect if we are inserting with a leading double-quote already present
+	// and if so not insert another one, and ensure we add a closing double-quote at the end
 	int i;
+	int copyOffset;
+	int remainder = len - insertPos;
+	bool hasSpace = memchr(source, ' ', sourceLen) != NULL;
+	bool hasLeadingQuote = sourceOffset < insertPos && buffer[insertPos - sourceOffset - 1] == '"';
+
+	// printf("\n\rinsertString: sourceLen=%d, sourceOffset=%d, insertPos=%d, len=%d, limit=%d, addedChar=%c, remainder=%d\n\r", sourceLen, sourceOffset, insertPos, len, limit, addedChar, remainder);
+
+	// adjust our source pointer to be where we want to start copying from
 	source += sourceOffset;
+	// and our length for the actual size we are going to insert
 	sourceLen -= sourceOffset;
-	if (len + sourceLen > limit) {
-		return false;
-	}
+
+	// if we are adding a character, we need to account for this
 	if (addedChar != '\0') {
 		sourceLen++;
 	}
+	// do we have enough room in the buffer to insert our string?
+	if (len + sourceLen + (hasSpace ? 2 : 0) > limit) {
+		return insertPos;
+	}
 
-	// Move buffer contents to allow for new string
+	// Move characters to the right of the insertion point to allow for the insertion
+	copyOffset = sourceLen;
+	if (hasSpace || hasLeadingQuote) {
+		copyOffset += 1;
+		if (hasSpace) {
+			copyOffset += 1;
+		}
+	}
 	for (i = len; i >= insertPos; i--) {
-		buffer[i + sourceLen] = buffer[i];
-	}
-	strncpy(buffer + insertPos, source, sourceLen - 1);
-	if (addedChar != '\0') {
-		buffer[insertPos + sourceLen - 1] = addedChar;
+		buffer[i + copyOffset] = buffer[i];
 	}
 
-	// Overwrite what's on-screen with what we are inserting
-	printf("%s", buffer + insertPos);
-	return true;
+	// Set the offset that we're copying into
+	copyOffset = insertPos;
+
+	// Insert an opening double-quote if we need it
+	if (hasSpace && !hasLeadingQuote) {
+		int start = insertPos - sourceOffset;
+		for (i = insertPos + 1; i > start; i--) {
+			buffer[i] = buffer[i - 1];
+		}
+		buffer[start] = '"';
+		copyOffset++;
+	}
+
+	// Copy the source string into the buffer
+	strncpy(buffer + copyOffset, source, sourceLen - 1);
+	copyOffset += sourceLen - 1;
+
+	if (hasSpace || hasLeadingQuote) {
+		buffer[copyOffset] = '"';
+		copyOffset++;
+		sourceLen += hasLeadingQuote ? 1 : 2;
+	}
+	if (addedChar != '\0') {
+		buffer[copyOffset] = addedChar;
+	}
+
+	
+	// Redraw what we've changed to the screen
+	if (hasSpace) {
+		// printf("redrawing, hasSpace: true, going left by %d, overwriting from %d\n\r", sourceOffset, insertPos - sourceOffset);
+		// printf("9876543210");
+		// Our cursor, at insertPos, needs to move back to the first double-quote we inserted
+		for (i = sourceOffset; i > 0; i--) {
+			doLeftCursor();
+		}
+		// Overwrite what's on-screen with what we are inserting
+		printf("%s", buffer + insertPos - sourceOffset);
+	} else {
+		// Overwrite what's on-screen with what we are inserting
+		printf("%s", buffer + insertPos);
+	}
+
+	// Move cursor to the end of the inserted string
+	for (i = 0; i < remainder; i++) {
+		doLeftCursor();
+	}
+
+	// Return the new insert position
+	return insertPos + sourceLen;
 }
 
 // Remove a character from the input string
@@ -267,6 +332,42 @@ BYTE handleHotkey(UINT8 fkey, char * buffer, int bufferLength, int insertPos, in
 	return 0;
 }
 
+// Find the start of a term in the buffer
+//
+const char * findTermStart(char * buffer, int insertPos, UINT16 flags) {
+	// flags potentially allow us to change behaviour
+	// for now we are hard-coded for the CLI, so first we skip leading `*` and ` ` characters
+	char * termPtr;
+	char * ptr = buffer + strspn(buffer, "* ");
+	if (*ptr == 0) {
+		return NULL;
+	}
+	termPtr = ptr;
+	
+	// and then use extractString to step through potential matches
+	while (ptr < buffer + insertPos) {
+		int result = extractString(ptr, &ptr, " ", &termPtr, EXTRACT_FLAG_INCLUDE_QUOTES);
+		if (result == MOS_BAD_STRING) {
+			// un-terminated double-quotes found
+			// ptr will still be the before start of the string, so we need to skip divider characters
+			termPtr = ptr + mos_strspn(ptr, " ");
+			break;
+		}
+	}
+
+	// If our term starts with a double quote we skip forwards past it
+	// so the auto-complete match finders don't have to
+	if (*termPtr == '"') {
+		termPtr++;
+	}
+	if (*termPtr == 0) {
+		// No term found
+		return NULL;
+	}
+
+	return termPtr;	
+}
+
 // The main line edit function
 // Parameters:
 // - buffer: Pointer to the line edit buffer
@@ -275,7 +376,7 @@ BYTE handleHotkey(UINT8 fkey, char * buffer, int bufferLength, int insertPos, in
 // Returns:
 // - The exit key pressed (ESC or CR)
 //
-UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
+UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 	BOOL	clear = flags & 0x01;		// Clear the buffer on entry
 	BOOL	enableTab = flags & 0x02;	// Enable tab completion (default off)
 	BOOL	enableHotkeys = !(flags & 0x04); // Enable hotkeys (default on)
@@ -418,27 +519,24 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 							case 0x09: if (enableTab) { // Tab completion
 								FRESULT fr;
 								char *searchTerm = NULL;
-								const char *termStart = buffer + insertPos;
+								const char *termStart; // = buffer + insertPos;
 								int termLength = 0;
 								int resolveLength;
 
-								// With tab-completion we are completing a "term" in the buffer
-								// start is last space before the insert position, end is the insert position
-								while (termStart > buffer && *(termStart - 1) != ' ') {
-									termStart--;
-								}
-								termLength = buffer + insertPos - termStart;
-
-								if (termStart == buffer + mos_strspn(buffer, "* ") && termLength == 0) {
-									// don't attempt to complete a zero-length command
+								termStart = findTermStart(buffer, insertPos, flags);
+								if (termStart == NULL) {
+									// no term found, so beep and exit
 									putch(0x07); // Beep
 									break;
 								}
+								termLength = buffer + insertPos - termStart;
+
+								// our term is from termStart to buffer + insertPos
+								// if the term had a leading double-quote, that is one character _before_ termStart
 
 								// if we're at the start of the buffer, then we're looking for a command, or executable
-								// TODO consider skipping auto-complete for commands if there's no term yet
 								if (
-									termStart == buffer + mos_strspn(buffer, "* ") &&
+									termStart == buffer + mos_strspn(buffer, "* \"") &&
 									memchr(termStart, '/', termLength) == NULL
 								) {
 									t_mosSystemVariable *var = NULL;
@@ -456,7 +554,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 									if (getSystemVariable(searchTerm, &var) == 0) {
 										// Matching alias found
 										matched = true;
-										success = insertString(buffer, var->label + 6, strlen(var->label + 6), termLength, insertPos, len, limit, ' ');
+										insertPos = insertString(buffer, var->label + 6, strlen(var->label + 6), termLength, insertPos, len, limit, ' ');
 									}
 
 									if (!matched) {
@@ -466,12 +564,12 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 										if (cmd != NULL) {
 											// Matching command found
 											matched = true;
-											success = insertString(buffer, cmd->name, strlen(cmd->name), termLength, insertPos, len, limit, ' ');
+											insertPos = insertString(buffer, cmd->name, strlen(cmd->name), termLength, insertPos, len, limit, ' ');
 										}
 									}
 
 									if (!matched) {
-										// Find command in runpath, or given path
+										// Find command in runpath, or given path - omitting hidden/system files
 										// TODO think more on this `:` detection once we support runtypes
 										if (memchr(termStart, ':' , termLength) != NULL) {
 											sprintf(searchTerm, "%.*s*.bin", termLength, termStart);
@@ -479,26 +577,23 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 											sprintf(searchTerm, "run:%.*s*.bin", termLength, termStart);
 										}
 										resolveLength = bufferLength;
-										fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL);
+										fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS);
 										if (fr == FR_OK) {
 											char * sourceLeaf = getFilepathLeafname(searchTerm);
 											int sourceOffset = sourceLeaf - searchTerm;
 											char * leafname = getFilepathLeafname(path);
 											matched = true;
-											success = insertString(buffer, leafname, strlen(leafname) - 4, strlen(sourceLeaf) - 5, insertPos, len, limit, isDirectory(path) ? '/' : ' ');
+											insertPos = insertString(buffer, leafname, strlen(leafname) - 4, strlen(sourceLeaf) - 5, insertPos, len, limit, isDirectory(path) ? '/' : ' ');
 										}
 									}
 									umm_free(searchTerm);
-									if (success) {
-										len = strlen(buffer);
-										insertPos = len;
-									}
 									if (matched) {
+										len = strlen(buffer);
 										break;
 									}
 								}
 
-								// if not at start of buffer, then we're doing filename completion
+								// if we've reached here, we're looking for a filename
 								searchTerm = (char*) umm_malloc(termLength + 2);
 								if (!searchTerm) {
 									// umm_malloc failed, so no tab completion for us today
@@ -507,15 +602,14 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT8 flags) {
 
 								sprintf(searchTerm, "%.*s*", termLength, termStart);
 								resolveLength = bufferLength;
-								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL);
+								// Find file, omitting hidden/system files
+								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS);
 								if (fr == FR_OK) {
 									char * sourceLeaf = getFilepathLeafname(searchTerm);
 									int sourceOffset = sourceLeaf - searchTerm;
 									char * leafname = getFilepathLeafname(path);
-									if (insertString(buffer, leafname, strlen(leafname), strlen(sourceLeaf) - 1, insertPos, len, limit, isDirectory(path) ? '/' : ' ')) {
-										len = strlen(buffer);
-										insertPos = len;
-									}
+									insertPos = insertString(buffer, leafname, strlen(leafname), strlen(sourceLeaf) - 1, insertPos, len, limit, isDirectory(path) ? '/' : ' ');
+									len = strlen(buffer);
 								} else {
 									putch(0x07); // Beep
 								}
