@@ -60,6 +60,7 @@
 #endif /* DEBUG */
 
 char	cmd[256];				// Array for the command line handler
+BYTE	depth = 0;				// Command depth, used to stop infinite loops of aliases or script files
 
 extern void *	set_vector(unsigned int vector, void(*handler)(void));	// In vectors16.asm
 
@@ -362,35 +363,59 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 	if (extension == NULL) {
 		result = MOS_INVALID_COMMAND;
 	} else {
-		// Look up a runtype for the file extension
-		char * runtype = NULL;
+		// Work out alias token for our extension and run the alias
 		char * token = umm_malloc(strlen(extension) + 17);
 		if (token == NULL) {
 			result = MOS_OUT_OF_MEMORY;
 		} else {
 			extension++;
 			sprintf(token, "Alias$@%sType_%s", run ? "Run" : "Load", extension);
-			// TODO consolidate alias handling here with alias handling in mos_exec
-			runtype = expandVariableToken(token);
-			umm_free(token);
-			if (runtype != NULL) {
-				// We have a run/load type, so use substituteArguments to build the command
-				char * command = substituteArguments(runtype, ptr, false);
-				if (command != NULL) {
-					createOrUpdateSystemVariable(run ? "LastFile$Run" : "LastFile$Load", MOS_VAR_STRING, command);
-					result = mos_exec(command, true, 0);
-					umm_free(command);
-				} else {
-					result = MOS_OUT_OF_MEMORY;
-				}
-				umm_free(runtype);
-			} else {
+			result = mos_execAlias(token, ptr, run ? "LastFile$Run" : "LastFile$Load", true);
+			if (result == MOS_NOT_IMPLEMENTED) {
 				result = MOS_INVALID_COMMAND;
 			}
 		}
 	}
 
 	umm_free(resolvedPath);
+	return result;
+}
+
+int mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos) {
+	int result = FR_OK;
+	char * expandedAlias;
+	char * command;
+	char * commandEnd;
+	char * alias = expandVariableToken(token);
+
+	if (alias == NULL) {	// Alias not found or couldn't be read
+		return MOS_NOT_IMPLEMENTED;
+	}
+
+	expandedAlias = substituteArguments(alias, args, false);
+	if (!expandedAlias) {
+		umm_free(alias);
+		return FR_INT_ERR;
+	}
+	if (saveToken != NULL) {	// Save the alias for later use/debugging
+		createOrUpdateSystemVariable(saveToken, MOS_VAR_STRING, expandedAlias);
+	}
+
+	depth++;
+	commandEnd = expandedAlias;
+	while (*commandEnd != '\0') {
+		result = extractString(commandEnd, &commandEnd, "\r", &command, EXTRACT_FLAG_OMIT_LEADSKIP | EXTRACT_FLAG_INCLUDE_QUOTES | EXTRACT_FLAG_AUTO_TERMINATE);
+		if (result != FR_OK) {	// Failed to extract a command
+			break;
+		}
+		result = mos_exec(command, in_mos);
+		if (result != FR_OK) {	// Failed to execute the command
+			break;
+		}
+	}
+	umm_free(expandedAlias);
+	depth--;
+
 	return result;
 }
 
@@ -401,7 +426,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 // Returns:
 // - MOS error code
 //
-int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
+int mos_exec(char * buffer, BOOL in_mos) {
 	char * 	ptr;
 	int 	result = 0;
 
@@ -418,8 +443,6 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 	if (ptr != NULL) {
 		int (*func)(char * ptr);
 		t_mosCommand *cmd;
-		t_mosSystemVariable *alias = NULL;
-		char * aliasToken;
 		char * commandPtr;
 		char * command = NULL;
 		char * args = NULL;
@@ -454,8 +477,7 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			cmdLen--;
 		} else {
 			// Check if this command has an alias
-			// TODO consolidate alias handling with mos_runOrLoadFile
-			aliasToken = umm_malloc(cmdLen + 7);
+			char * aliasToken = umm_malloc(cmdLen + 7);
 			if (aliasToken == NULL) {
 				return MOS_OUT_OF_MEMORY;
 			}
@@ -463,36 +485,11 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			if (cmdLen > 1 && aliasToken[strlen(aliasToken) - 1] == '.') {
 				aliasToken[strlen(aliasToken) - 1] = '*';
 			}
-			if (getSystemVariable(aliasToken, &alias) == 0) {
-				char * aliasTemplate;
-				char * expandedAlias;
-				char * commandEnd;
-				umm_free(aliasToken);
-				aliasTemplate = expandVariable(alias, false);
-				if (!aliasTemplate) {
-					return FR_INT_ERR;
-				}
-				expandedAlias = substituteArguments(aliasTemplate, ptr, false);
-				umm_free(aliasTemplate);
-				if (!expandedAlias) {
-					return FR_INT_ERR;
-				}
-				commandEnd = expandedAlias;
-				while (*commandEnd != '\0') {
-					result = extractString(commandEnd, &commandEnd, "\r", &command, EXTRACT_FLAG_OMIT_LEADSKIP | EXTRACT_FLAG_INCLUDE_QUOTES | EXTRACT_FLAG_AUTO_TERMINATE);
-					if (result != FR_OK) {	// Failed to extract a command
-						break;
-					}
-					result = mos_exec(command, in_mos, depth + 1);
-					if (result != FR_OK) {	// Failed to execute the command
-						break;
-					}
-				}
-				umm_free(expandedAlias);
-				return result;
-			}
-
+			result = mos_execAlias(aliasToken, ptr, NULL, in_mos);
 			umm_free(aliasToken);
+			if (result != MOS_NOT_IMPLEMENTED) {
+				return result;	// Alias was found and run so return result
+			}
 		}
 
 		command = umm_malloc(cmdLen + 1);
@@ -519,14 +516,6 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			// Command not built-in, so see if it's a file
 			char * path;
 			bool useWildcard = false;
-			// OK - with the logic as it was, `./` would match an arbitrary moslet
-			// this is not what we want
-			// and `./filename.bin` would fail to find the file to run it
-			if (*commandPtr == '.') {
-				// Single dot can't match
-				// printf("cmdLen is 1\n\r");
-				return MOS_INVALID_COMMAND;
-			}
 			if (cmdLen < 2) {
 				// Command is too short to be a valid command
 				return MOS_INVALID_COMMAND;
@@ -537,7 +526,7 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 				return MOS_INVALID_COMMAND;
 			}
 			if (*(commandPtr + cmdLen - 1) == '.') {
-				// If we have a trailing dot on our command, replace with * for wilcard matching
+				// A trailing dot on a command is treated as a wildcard when searching for a matching executable
 				useWildcard = true;
 				cmdLen--;
 			}
@@ -553,7 +542,6 @@ int mos_exec(char * buffer, BOOL in_mos, BYTE depth) {
 			// expand any variables in our arguments, if we can, and run the command
 			args = expandMacro(ptr);
 			result = mos_runBinFile(path, args ? args : ptr);
-
 			if (result == FR_NO_FILE || result == FR_NO_PATH || result == FR_DISK_ERR) {
 				result = MOS_INVALID_COMMAND;
 			}
@@ -655,7 +643,7 @@ int mos_cmdDIR(char * ptr) {
 //
 int mos_cmdDO(char * ptr) {
 	// Call mos_exec with in_mos set to true, which allows for OSCLI commands to use full run path
-	return mos_exec(ptr, true, 0);
+	return mos_exec(ptr, true);
 }
 
 // TRY command
@@ -667,7 +655,7 @@ int mos_cmdDO(char * ptr) {
 //
 int mos_cmdTRY(char * ptr) {
 	// Call mos_exec with in_mos set to true, which allows for OSCLI commands to use full run path
-	int result = mos_exec(ptr, true, 0);
+	int result = mos_exec(ptr, true);
 
 	createOrUpdateSystemVariable("Try$ReturnCode", MOS_VAR_NUMBER, (void *)result);
 	if (result > 0) {
@@ -900,9 +888,9 @@ int mos_cmdIF(char * ptr) {
 
 	if (result == FR_OK) {
 		if (conditionResultBool) {
-			result = mos_exec(then, true, 0);
+			result = mos_exec(then, true);
 		} else if (elseCmd) {
-			result = mos_exec(elseCmd, true, 0);
+			result = mos_exec(elseCmd, true);
 		}
 	}
 
@@ -951,9 +939,9 @@ int mos_cmdIFTHERE(char * ptr) {
 	umm_free(filepath);
 
 	if (result == FR_OK) {
-		result = mos_exec(then, true, 0);
+		result = mos_exec(then, true);
 	} else if (elseCmd) {
-		result = mos_exec(elseCmd, true, 0);
+		result = mos_exec(elseCmd, true);
 	} else {
 		// No ELSE command, so return OK
 		result = FR_OK;
@@ -1061,6 +1049,7 @@ int mos_cmdOBEY(char *ptr) {
 	}
 
 	if (fr == FR_OK) {
+		depth++;
 		while (!f_eof(&fil)) {
 			line++;
 			f_gets(buffer, size, &fil);
@@ -1074,13 +1063,14 @@ int mos_cmdOBEY(char *ptr) {
 				if (strrchr(substituted, '\n') == NULL) printf("\n");
 				if (strrchr(substituted, '\r') == NULL) printf("\r");
 			}
-			fr = mos_exec(substituted, TRUE, 0);
+			fr = mos_exec(substituted, true);
 			umm_free(substituted);
 			if (fr != FR_OK) {
 				printf("\r\nError executing %s at line %d\r\n", expandedPath, line);
 				break;
 			}
 		}
+		depth--;
 	}
 	f_close(&fil);
 	umm_free(expandedPath);
@@ -2638,15 +2628,17 @@ UINT24 mos_EXEC(char * filename) {
 		fr = f_open(&fil, expandedPath, FA_READ);
 	}
 	if (fr == FR_OK) {
+		depth++;
 		while (!f_eof(&fil)) {
 			line++;
 			f_gets(buffer, size, &fil);
-			fr = mos_exec(buffer, TRUE, 0);
+			fr = mos_exec(buffer, true);
 			if (fr != FR_OK) {
 				printf("\r\nError executing %s at line %d\r\n", expandedPath, line);
 				break;
 			}
 		}
+		depth--;
 		f_close(&fil);
 	}
 	umm_free(expandedPath);
@@ -2842,7 +2834,7 @@ void mos_GETERROR(UINT8 errno, UINT24 address, UINT24 size) {
 UINT24 mos_OSCLI(char * cmd) {
 	UINT24 fr;
 	// NB OSCLI doesn't support automatic running of programs besides moslets
-	fr = mos_exec(cmd, FALSE, 0);
+	fr = mos_exec(cmd, false);
 	createOrUpdateSystemVariable("Sys$ReturnCode", MOS_VAR_NUMBER, (void *)fr);
 	return fr;
 }
