@@ -1601,6 +1601,7 @@ mos_api_clear_vdp_flags:
 mos_api_wait_vdp_flags:
 			PUSH	BC
 			CALL	_wait_VDP
+			POP	BC
 			RET
 
 ; Open a file
