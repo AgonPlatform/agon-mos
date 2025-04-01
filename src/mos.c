@@ -287,7 +287,7 @@ int mos_runBinFile(char * filepath, char * args) {
 	char * fullyResolvedPath = NULL;
 	int pathLen = 0;
 	UINT24 addr = MOS_defaultLoadAddress;
-	int result = getResolvedPath(filepath, &resolvedPath);
+	int result = getResolvedPath(filepath, &resolvedPath, RESOLVE_OMIT_EXPAND);
 
 	#if DEBUG > 0
 	createOrUpdateSystemVariable("LastBin$RunPath", MOS_VAR_STRING, filepath);
@@ -343,7 +343,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 		return MOS_OUT_OF_MEMORY;
 	}
 	sprintf(filepath, "%.*s", cmdFileEnd - cmdFile, cmdFile);
-	result = getResolvedPath(filepath, &resolvedPath);
+	result = getResolvedPath(filepath, &resolvedPath, RESOLVE_OMIT_EXPAND);
 	umm_free(filepath);
 
 	#if DEBUG > 0
@@ -923,18 +923,25 @@ int mos_cmdIFTHERE(char * ptr) {
 		elseCmd += 6;
 	}
 
-	// TODO this probably needs to be called with the double-quotes flag cleared
+	// remove leading and trailing spaces from our potential file path
+	ptr = mos_trim(ptr, false, true);
 	filepath = expandMacro(ptr);
 	if (!filepath) {
 		return FR_INVALID_PARAMETER;
 	}
+	// expandMacro calls gsTrans in such a way that it will keep wrapping double-quotes - we need to remove them
+	ptr = filepath;
+	if (ptr[0] == '\"' && ptr[strlen(ptr) - 1] == '\"') {
+		ptr[strlen(ptr) - 1] = '\0';
+		ptr++;
+	}
 
-	if (strlen(filepath) == 0) {
+	if (strlen(ptr) == 0) {
 		// No path to check, which we will interpret as "false"
 		result = FR_INVALID_PARAMETER;
 	} else {
 		// check if the file exists
-		result = resolvePath(filepath, NULL, &pathLength, NULL, NULL, 0);
+		result = resolvePath(ptr, NULL, &pathLength, NULL, NULL, RESOLVE_OMIT_EXPAND);
 	}
 	umm_free(filepath);
 
@@ -1025,7 +1032,7 @@ int mos_cmdOBEY(char *ptr) {
 
 	// TODO Consider merging with mos_EXEC - below is very similar
 
-	fr = getResolvedPath(filename, &expandedPath);
+	fr = getResolvedPath(filename, &expandedPath, RESOLVE_OMIT_EXPAND);
 	if (fr == FR_OK) {
 		fr = f_open(&fil, expandedPath, FA_READ);
 	}
@@ -1140,7 +1147,7 @@ int mos_cmdDEL(char * ptr) {
 	}
 
 	// Work out our maximum path length
-	fr = resolvePath(filename, NULL, &maxLength, NULL, NULL, 0);
+	fr = resolvePath(filename, NULL, &maxLength, NULL, NULL, RESOLVE_OMIT_EXPAND);
 	if (!(fr == FR_OK || fr == FR_NO_FILE)) {
 		return fr;
 	}
@@ -1152,7 +1159,7 @@ int mos_cmdDEL(char * ptr) {
 	*resolvedPath = '\0';
 
 	length = maxLength;
-	fr = resolvePath(filename, resolvedPath, &length, &index, &dir, 0);
+	fr = resolvePath(filename, resolvedPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 	unlinkResult = fr;
 
 	while (fr == FR_OK) {
@@ -1186,7 +1193,7 @@ int mos_cmdDEL(char * ptr) {
 		// On any unlink error, break out of the loop
 		if (unlinkResult != FR_OK) break;
 		length = maxLength;
-		fr = resolvePath(filename, resolvedPath, &length, &index, &dir, 0);
+		fr = resolvePath(filename, resolvedPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 	}
 
 	umm_free(resolvedPath);
@@ -1833,7 +1840,7 @@ UINT24 mos_LOAD(char * filename, UINT24 address, UINT24 size) {
 	UINT	br;	
 	FSIZE_t	fSize;
 	char *	expandedFilename = NULL;
-	FRESULT	fr = getResolvedPath(filename, &expandedFilename);
+	FRESULT	fr = getResolvedPath(filename, &expandedFilename, RESOLVE_OMIT_EXPAND);
 	
 	if (fr != FR_OK) {
 		return fr;
@@ -1892,7 +1899,7 @@ UINT24 mos_SAVE(char * filename, UINT24 address, UINT24 size) {
 		return FR_INVALID_PARAMETER;
 	}
 
-	fr = getResolvedPath(filename, &expandedFilename);
+	fr = getResolvedPath(filename, &expandedFilename, RESOLVE_OMIT_EXPAND);
 
 	if (fr == FR_OK || fr == FR_NO_FILE) {
 		fr = f_open(&fil, expandedFilename, FA_WRITE | FA_CREATE_NEW);
@@ -1934,7 +1941,7 @@ UINT24 mos_TYPE(char * filename) {
 		return MOS_OUT_OF_MEMORY;
 	}
 
-	fr = getResolvedPath(filename, &expandedFilename);
+	fr = getResolvedPath(filename, &expandedFilename, RESOLVE_OMIT_EXPAND);
 	if (fr == FR_OK) {
 		fr = f_open(&fil, expandedFilename, FA_READ);
 	}
@@ -1980,7 +1987,7 @@ UINT24	mos_CD(char *path) {
 	FRESULT	fr;
 	char *	expandedPath = NULL;
 
-	fr = getResolvedPath(path, &expandedPath);
+	fr = getResolvedPath(path, &expandedPath, RESOLVE_OMIT_EXPAND);
 	if (fr == FR_OK || fr == FR_NO_FILE) {
 		fr = f_chdir(expandedPath);
 		f_getcwd(cwd, sizeof(cwd)); // Update full path.
@@ -2326,17 +2333,20 @@ UINT24 mos_DIR(char* inputPath, BYTE flags) {
 // - FatFS return code
 //
 UINT24 mos_DEL(char * filename) {
-	char * expandedPath = NULL;
 	FRESULT	fr;
+	char * resolvedPath = NULL;
+	char * expandedPath = expandMacro(filename);
+	if (expandedPath == NULL) return FR_INT_ERR;
 	if (mos_strcspn(filename, "*?") == strlen(filename)) {
-		fr = expandPath(filename, &expandedPath);
+		fr = getResolvedPath(expandedPath, &resolvedPath, RESOLVE_OMIT_EXPAND);
 		if (fr == FR_OK) {
-			fr = f_unlink(expandedPath);
+			fr = f_unlink(resolvedPath);
 		}
-		umm_free(expandedPath);
+		umm_free(resolvedPath);
 	} else {
 		fr = FR_INVALID_PARAMETER;
 	}
+	umm_free(expandedPath);
 	return fr;
 }
 
@@ -2390,7 +2400,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 	// NB if target is not a directory only first match will be copied
 	usePattern = mos_strcspn(srcPath, "*?:") != strlen(srcPath);
 
-	fr = getResolvedPath(dstPath, &resolvedDestPath);
+	fr = getResolvedPath(dstPath, &resolvedDestPath, RESOLVE_OMIT_EXPAND);
 	if (fr != FR_OK && fr != FR_NO_FILE) {
 		// Destination path must either be a directory, or a non-existant file
 		umm_free(resolvedDestPath);
@@ -2406,7 +2416,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 		addSlash = dstPath[strlen(dstPath) - 1] != '/';
 	}
 
-	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, 0);
+	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, RESOLVE_OMIT_EXPAND);
 	if (fr != FR_OK) {
 		// source couldn't be resolved, so no file to move
 		umm_free(resolvedDestPath);
@@ -2419,7 +2429,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 	}
 
 	length = maxLength;
-	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
+	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 	renResult = fr;
 
 	while (fr == FR_OK) {
@@ -2440,7 +2450,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 		if (usePattern && targetIsDir) {
 			// get next matching source, if there is one
 			length = maxLength;
-			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
+			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 		} else {
 			break;
 		}
@@ -2503,7 +2513,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 	// NB if target is not a directory only first match will be copied
 	usePattern = mos_strcspn(srcPath, "*?:") != strlen(srcPath);
 
-	fr = getResolvedPath(dstPath, &resolvedDestPath);
+	fr = getResolvedPath(dstPath, &resolvedDestPath, RESOLVE_OMIT_EXPAND);
 	if (fr != FR_OK && fr != FR_NO_FILE) {
 		// Destination path must either be a directory, or a non-existant file
 		umm_free(resolvedDestPath);
@@ -2519,7 +2529,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 		addSlash = dstPath[strlen(dstPath) - 1] != '/';
 	}
 
-	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, 0);
+	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, RESOLVE_OMIT_EXPAND);
 	if (fr != FR_OK) {
 		// we only support copying files - a resolved source path returning `no file` or `no path` is an error
 		umm_free(resolvedDestPath);
@@ -2532,7 +2542,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 	}
 
 	length = maxLength;
-	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
+	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 	copyResult = fr;
 
 	while (fr == FR_OK) {
@@ -2562,7 +2572,7 @@ UINT24 mos_COPY(char *srcPath, char *dstPath, BOOL verbose) {
 		if (usePattern && targetIsDir) {
 			// get next matching source, if there is one
 			length = maxLength;
-			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, 0);
+			fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 		} else {
 			break;
 		}
@@ -2584,7 +2594,7 @@ UINT24 mos_MKDIR(char * filename) {
 	FRESULT	fr;
 	char *	resolved = NULL;
 
-	fr = getResolvedPath(filename, &resolved);
+	fr = getResolvedPath(filename, &resolved, RESOLVE_OMIT_EXPAND);
 	if (fr == FR_NO_FILE) {
 		fr = f_mkdir(resolved);
 	}
@@ -2623,7 +2633,7 @@ UINT24 mos_EXEC(char * filename) {
 	if (!buffer) {
 		return MOS_OUT_OF_MEMORY;
 	}
-	fr = getResolvedPath(filename, &expandedPath);
+	fr = getResolvedPath(filename, &expandedPath, RESOLVE_OMIT_EXPAND);
 	if (fr == FR_OK) {
 		fr = f_open(&fil, expandedPath, FA_READ);
 	}
@@ -2656,7 +2666,7 @@ UINT24 mos_EXEC(char * filename) {
 UINT24 mos_FOPEN(char * filename, UINT8 mode) {
 	char *	expandedFilename = NULL;
 	int		i;
-	FRESULT	fr = expandPath(filename, &expandedFilename);
+	FRESULT	fr = getResolvedPath(filename, &expandedFilename, 0);
 
 	if (fr == FR_OK || fr == FR_NO_FILE) {
 		for (i = 0; i < MOS_maxOpenFiles; i++) {
