@@ -243,7 +243,7 @@ int main(void) {
 	//
 	while (1) {
 		if (mos_input(&cmd, sizeof(cmd)) == 13) {
-			int err = mos_exec(&cmd, TRUE, 0);
+			int err = mos_exec(&cmd, true);
 			createOrUpdateSystemVariable("Sys$ReturnCode", MOS_VAR_NUMBER, (void *)err);
 			if (err > 0) {
 				mos_error(err);

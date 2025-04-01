@@ -62,7 +62,8 @@ char *	mos_trim(char * s, bool removeLeadingAsterisks, bool removeTrailingSpaces
 int		mos_runBin(UINT24 addr, char * args);
 int		mos_runBinFile(char * filepath, char * args);
 int		mos_runOrLoadFile(char * args, bool run);
-int		mos_exec(char * buffer, BOOL in_mos, BYTE depth);
+int		mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos);
+int		mos_exec(char * buffer, BOOL in_mos);
 UINT8 	mos_execMode(UINT8 * ptr);
 
 int		mos_mount(void);
