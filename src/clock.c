@@ -21,6 +21,7 @@
 #include "defines.h"
 #include "uart.h"
 #include "clock.h"
+#include "mos.h"
 #include "strings.h"
 
 extern volatile BYTE vpd_protocol_flags;		// In globals.asm
@@ -64,7 +65,7 @@ void rtc_update() {
 	putch(VDP_rtc);
 	putch(0);					// 0: Get time
 
-	while ((vpd_protocol_flags & 0x20) == 0);	
+	wait_VDP(0x20);				// Wait for bit to be set, or timeout
 }
 
 // Unpack a 6-byte RTC packet into time struct

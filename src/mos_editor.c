@@ -113,8 +113,6 @@ BOOL insertCharacter(char *buffer, char c, int insertPos, int len, int limit) {
 // Insert into buffer a sub-string from `source` at `sourceOffset` of length `sourceLen` at `insertPos`
 // This will detect spaces in the source string and wrap the inserted string in double-quotes
 int insertString(char * buffer, char * source, int sourceLen, int sourceOffset, int insertPos, int len, int limit, char addedChar) {
-	// TODO this needs to detect if we are inserting with a leading double-quote already present
-	// and if so not insert another one, and ensure we add a closing double-quote at the end
 	int i;
 	int copyOffset;
 	int remainder = len - insertPos;

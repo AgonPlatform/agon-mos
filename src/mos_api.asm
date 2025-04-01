@@ -70,6 +70,7 @@
 			XREF	_mos_I2C_READ
 
 			XREF	_fat_EOF		; In mos.c
+			XREF	_wait_VDP
 
 			XREF	_open_UART1		; In uart.c
 			XREF	_close_UART1
@@ -197,8 +198,8 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_not_implemented	; 0x3e
 			DW	mos_api_not_implemented	; 0x3f
 
-			DW	mos_api_not_implemented	; 0x40
-			DW	mos_api_not_implemented	; 0x41
+			DW	mos_api_clear_vdp_flags	; 0x40
+			DW	mos_api_wait_vdp_flags	; 0x41
 			DW	mos_api_not_implemented	; 0x42
 			DW	mos_api_not_implemented	; 0x43
 			DW	mos_api_not_implemented	; 0x44
@@ -1577,6 +1578,29 @@ $$:			PUSH	DE		; int length
 			POP	HL
 			POP	IX
 			POP	DE
+			RET
+
+; Clear VDP flag(s)
+; C: bitmask of flags to clear
+; Returns:
+; - A: vdp flags
+mos_api_clear_vdp_flags:
+			PUSH	HL		; Save HL
+			LD	HL, _vpd_protocol_flags
+			LD	A, C
+			CPL			; Invert the bitmask
+			AND	(HL)		; Clear the requested flags
+			LD	(HL), A		; Save the new flags
+			POP	HL
+			RET
+
+; Wait until VDP flag(s) are set, or timeout
+; C: bitmask of flags to wait for
+; Returns:
+; - A = status code (0 = OK, 15 = timeout (FR_TIMEOUT))
+mos_api_wait_vdp_flags:
+			PUSH	BC
+			CALL	_wait_VDP
 			RET
 
 ; Open a file
