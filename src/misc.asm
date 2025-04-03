@@ -24,6 +24,7 @@
 			XDEF	SWITCH_A
 			XDEF	SET_AHL24
 			XDEF	GET_AHL24
+			XDEF	FIX_HLU24
 			XDEF	SET_ADE24
 			XDEF	SET_ABC24
 			XDEF	SET_AIX24
@@ -69,6 +70,18 @@ GET_AHL24:		PUSH	HL
 			LD	A, (HL)
 			POP	HL
 			RET
+
+; Optionally set MSB of HL(U) to MB, if needed
+; Sets U of HLU to MB if MB != 0 and U is not already set
+;
+FIX_HLU24:		LD	A, MB
+			OR	A
+			RET	Z
+			CALL	GET_AHL24
+			OR 	A, A
+			RET	Z
+			LD	A, MB
+			JP	SET_AHL24
 
 ; Set the MSB of DE (U) to A
 ;

@@ -36,6 +36,7 @@
 			XREF	SWITCH_A		; In misc.asm
 			XREF	SET_AHL24
 			XREF	GET_AHL24
+			XREF	FIX_HLU24
 			XREF	SET_ADE24
 			XREF	SET_ABC24
 			XREF	SET_AIX24
@@ -94,6 +95,7 @@
 			XREF	_f_stat
 			XREF	_f_lseek
 			XREF	_f_truncate
+			XREF	_f_sync
 			XREF	_f_opendir
 			XREF	_f_closedir
 			XREF	_f_readdir
@@ -1631,7 +1633,7 @@ $$:			PUSH	BC		; BYTE mode
 			RET
 
 ; Close a file
-; HLU: Pointer to a blank FIL struct
+; HLU: Pointer to a FIL struct
 ; Returns:
 ;   A: FRESULT
 ;
@@ -1800,14 +1802,23 @@ $$:			PUSH	HL		; FIL * fp
 			POP	HL
 			RET
 
+; Flush cached information of a writing file
+; HLU: Pointer to a FIL struct
+; Returns:
+;   A: FRESULT
 ;
-; Commands that have not been implemented yet
-;
+; TODO replace code in this file that uses GET_AHL24 with FIX_HLU24
 ffs_api_fsync:
+			CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			CALL	_f_sync
+			LD	A, L
+			POP	HL
+			RET
+
+ffs_api_fforward:	; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_fforward:
-			JP mos_api_not_implemented
-ffs_api_fexpand:
+ffs_api_fexpand:	; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
 ffs_api_fgets:
 			JP mos_api_not_implemented
@@ -1815,13 +1826,13 @@ ffs_api_fputc:
 			JP mos_api_not_implemented
 ffs_api_fputs:
 			JP mos_api_not_implemented
-ffs_api_fprintf:
+ffs_api_fprintf:	; Available, but hard to expose as an API
 			JP mos_api_not_implemented
-ffs_api_ftell:
+ffs_api_ftell:		; Available, but not a useful API to expose
 			JP mos_api_not_implemented
 ffs_api_fsize:
 			JP mos_api_not_implemented
-ffs_api_ferror:
+ffs_api_ferror:		; Of limited utility, but simple to implement
 			JP mos_api_not_implemented
 
 ; Open a directory
@@ -1893,7 +1904,7 @@ ffs_api_mkdir:
 			JP mos_api_not_implemented
 ffs_api_chdir:
 			JP mos_api_not_implemented
-ffs_api_chdrive:
+ffs_api_chdrive:	; Available but as we only support one drive, this is not useful
 			JP mos_api_not_implemented
 ; Copy the current directory (string) into buffer (hl)
 ; HLU: Pointer to a buffer
@@ -1915,15 +1926,17 @@ $$:
 
 ffs_api_mount:
 			JP mos_api_not_implemented
-ffs_api_mkfs:
+ffs_api_mkfs:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_fdisk:
+ffs_api_fdisk:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_getfree:
+ffs_api_getfree:	; A raw implementation of this is of limited utility
+			; as it returns a count of free clusters, not bytes
+			; and a pointer to the FATFS struct which includes the cluster size 
 			JP mos_api_not_implemented
 ffs_api_getlabel:
 			JP mos_api_not_implemented
 ffs_api_setlabel:
 			JP mos_api_not_implemented
-ffs_api_setcp:
+ffs_api_setcp:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
