@@ -35,8 +35,8 @@
 
 			XREF	SWITCH_A		; In misc.asm
 			XREF	SET_AHL24
-			XREF	GET_AHL24
 			XREF	FIX_HLU24
+			XREF	FIX_HLU24_no_mb_check
 			XREF	SET_ADE24
 			XREF	SET_ABC24
 			XREF	SET_AIX24
@@ -1617,11 +1617,7 @@ ffs_api_fopen:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	BC		; BYTE mode
 			PUSH	DE		; const TCHAR * path
 			PUSH	HL		; FIL * fp
@@ -1637,15 +1633,8 @@ $$:			PUSH	BC		; BYTE mode
 ; Returns:
 ;   A: FRESULT
 ;
-ffs_api_fclose:		LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	HL		; FIL * fp
+ffs_api_fclose:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
 			CALL	_f_close
 			LD	A, L		; FRESULT
 			POP	HL
@@ -1663,11 +1652,7 @@ ffs_api_fread:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	HL
 			LD	HL, _scratchpad
 			EX	(SP), HL	; UINT * br
@@ -1695,11 +1680,7 @@ ffs_api_fwrite:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	HL
 			LD	HL, _scratchpad
 			EX	(SP), HL	; UINT * bw
@@ -1725,11 +1706,7 @@ ffs_api_stat:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	HL		; FILEINFO * fil
 			PUSH	DE		; const TCHAR * path
 			CALL	_f_stat
@@ -1743,15 +1720,8 @@ $$:			PUSH	HL		; FILEINFO * fil
 ; Returns:
 ;   A: 1 if end of file, otherwise 0
 ;
-ffs_api_feof:		LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	HL		; FILEINFO * fil
+ffs_api_feof:		CALL	FIX_HLU24
+			PUSH	HL		; FILEINFO * fil
 			CALL	_fat_EOF
 			LD	A, L 		; EOF
 			POP	HL
@@ -1764,15 +1734,8 @@ $$:			PUSH	HL		; FILEINFO * fil
 ; Returns:
 ;   A: FRESULT
 ;
-ffs_api_flseek:		LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	BC 		; FSIZE_t ofs (msb)
+ffs_api_flseek:		CALL	FIX_HLU24
+			PUSH	BC 		; FSIZE_t ofs (msb)
 			PUSH	DE		; FSIZE_t ofs (lsw)
 			PUSH	HL		; FIL * fp
 			CALL	_f_lseek
@@ -1787,16 +1750,8 @@ $$:			PUSH	BC 		; FSIZE_t ofs (msb)
 ; Returns:
 ;   A: FRESULT
 ;
-ffs_api_ftruncate:
-			LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	HL		; FIL * fp
+ffs_api_ftruncate:	CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
 			CALL	_f_truncate
 			LD	A, L
 			POP	HL
@@ -1807,7 +1762,6 @@ $$:			PUSH	HL		; FIL * fp
 ; Returns:
 ;   A: FRESULT
 ;
-; TODO replace code in this file that uses GET_AHL24 with FIX_HLU24
 ffs_api_fsync:
 			CALL	FIX_HLU24
 			PUSH	HL		; FIL * fp
