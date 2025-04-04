@@ -2944,6 +2944,28 @@ UINT8 fat_EOF(FIL * fp) {
 	return 0;
 }
 
+UINT32 fat_size(FIL * fp) {
+	return f_size(fp);
+}
+
+UINT8 fat_error(FIL * fp) {
+	return f_error(fp);
+}
+
+int fat_getfree(const TCHAR * path, DWORD * clusters, DWORD * clusterSize) {
+	FATFS * fs = NULL;
+	int result;
+	if (clusters == NULL || clusterSize == NULL) {
+		return FR_INVALID_PARAMETER;
+	}
+	if (path == NULL) {
+		path = "";		// Default path for our mounted drive
+	}
+	result = f_getfree(path, clusters, &fs);
+	*clusterSize = result == FR_OK ? fs->csize : 0;
+	return result;
+}
+
 // (Re-)mount the MicroSD card
 // Parameters:
 // - None
