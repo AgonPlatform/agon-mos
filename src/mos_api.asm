@@ -96,6 +96,9 @@
 			XREF	_f_lseek
 			XREF	_f_truncate
 			XREF	_f_sync
+			XREF	_f_gets
+			XREF	_f_putc
+			XREF	_f_puts
 			XREF	_f_opendir
 			XREF	_f_closedir
 			XREF	_f_readdir
@@ -1774,12 +1777,63 @@ ffs_api_fforward:	; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
 ffs_api_fexpand:	; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_fgets:
-			JP mos_api_not_implemented
-ffs_api_fputc:
-			JP mos_api_not_implemented
-ffs_api_fputs:
-			JP mos_api_not_implemented
+
+; Read a string from a file
+; HLU: Pointer to a FIL struct
+; DEU: Pointer to target buffer to read string into
+; BCU: Buffer size
+; Returns:
+;   DEU: Pointer to target buffer or null if error
+;
+ffs_api_fgets:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	HL		; FILE * fp
+			PUSH	BC		; UINT len
+			PUSH	DE		; void * buff
+			CALL	_f_gets
+			LD	DE, HL		; Return value in DE
+			POP	HL
+			POP	BC
+			POP	BC
+			RET
+
+; Write a character to a file
+; HLU: Pointer to a FIL struct
+; C: Character to write
+; Returns:
+;  BCU: Number of bytes written
+;
+ffs_api_fputc:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			PUSH	BC		; TCHAR c
+			CALL	_f_putc
+			LD	BC, HL		; Return value in BCU
+			POP	HL
+			POP	HL
+			RET
+
+; Write a string to a file
+; HLU: Pointer to a FIL struct
+; DEU: Pointer to the string to write out
+; Returns:
+;  BCU: Number of bytes written
+;
+ffs_api_fputs:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	HL		; FIL * fp
+			PUSH	DE		; const TCHAR * str
+			CALL	_f_puts
+			LD	BC, HL		; Return value in BCU
+			POP	HL
+			POP	HL
+			RET
+
 ffs_api_fprintf:	; Available, but hard to expose as an API
 			JP mos_api_not_implemented
 ffs_api_ftell:		; Available, but not a useful API to expose
