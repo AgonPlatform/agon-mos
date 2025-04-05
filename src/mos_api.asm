@@ -35,7 +35,8 @@
 
 			XREF	SWITCH_A		; In misc.asm
 			XREF	SET_AHL24
-			XREF	GET_AHL24
+			XREF	FIX_HLU24
+			XREF	FIX_HLU24_no_mb_check
 			XREF	SET_ADE24
 			XREF	SET_ABC24
 			XREF	SET_AIX24
@@ -68,8 +69,13 @@
 			XREF	_mos_I2C_CLOSE
 			XREF	_mos_I2C_WRITE
 			XREF	_mos_I2C_READ
+			XREF	_mos_mount
 
-			XREF	_fat_EOF		; In mos.c
+			XREF	_fat_tell		; In mos.c
+			XREF	_fat_EOF
+			XREF	_fat_size
+			XREF	_fat_error
+			XREF	_fat_getfree
 			XREF	_wait_VDP
 
 			XREF	_open_UART1		; In uart.c
@@ -91,13 +97,25 @@
 			XREF	_f_close
 			XREF	_f_read
 			XREF	_f_write
-			XREF	_f_stat
 			XREF	_f_lseek
 			XREF	_f_truncate
+			XREF	_f_sync
+			XREF	_f_gets
+			XREF	_f_putc
+			XREF	_f_puts
 			XREF	_f_opendir
 			XREF	_f_closedir
 			XREF	_f_readdir
+			XREF	_f_findfirst
+			XREF	_f_findnext
+			XREF	_f_stat
+			XREF	_f_unlink
+			XREF	_f_rename
+			XREF	_f_mkdir
+			XREF	_f_chdir
 			XREF	_f_getcwd
+			XREF	_f_getlabel
+			XREF	_f_setlabel
 
 			XREF	_pmatch			; In strings.c
 
@@ -1615,11 +1633,7 @@ ffs_api_fopen:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	BC		; BYTE mode
 			PUSH	DE		; const TCHAR * path
 			PUSH	HL		; FIL * fp
@@ -1631,19 +1645,12 @@ $$:			PUSH	BC		; BYTE mode
 			RET
 
 ; Close a file
-; HLU: Pointer to a blank FIL struct
+; HLU: Pointer to a FIL struct
 ; Returns:
 ;   A: FRESULT
 ;
-ffs_api_fclose:		LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	HL		; FIL * fp
+ffs_api_fclose:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
 			CALL	_f_close
 			LD	A, L		; FRESULT
 			POP	HL
@@ -1661,11 +1668,7 @@ ffs_api_fread:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	HL
 			LD	HL, _scratchpad
 			EX	(SP), HL	; UINT * br
@@ -1693,11 +1696,7 @@ ffs_api_fwrite:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
 			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
+			CALL	FIX_HLU24_no_mb_check
 $$:			PUSH	HL
 			LD	HL, _scratchpad
 			EX	(SP), HL	; UINT * bw
@@ -1713,48 +1712,6 @@ $$:			PUSH	HL
 			LD	BC, (_scratchpad)
 			RET
 
-; Check file exists
-; HLU: Pointer to a FILINFO struct
-; DEU: Pointer to the filename (0 terminated)
-; Returns:
-;   A: FRESULT
-;
-ffs_api_stat:		LD	A, MB		; A: MB
-			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
-			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
-			CALL	GET_AHL24	; Get MSB of HL
-			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
-			LD	A, MB		; A: MB
-			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
-;
-$$:			PUSH	HL		; FILEINFO * fil
-			PUSH	DE		; const TCHAR * path
-			CALL	_f_stat
-			LD	A, L 		; FRESULT
-			POP	DE
-			POP	HL
-			RET
-
-; Check for EOF
-; HLU: Pointer to a FILINFO struct
-; Returns:
-;   A: 1 if end of file, otherwise 0
-;
-ffs_api_feof:		LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	HL		; FILEINFO * fil
-			CALL	_fat_EOF
-			LD	A, L 		; EOF
-			POP	HL
-			RET
-
 ; Move the read/write pointer in a file
 ; HLU: Pointer to a FIL struct
 ; DEU: Least significant 3 bytes of the offset from the start of the file (DWORD)
@@ -1762,15 +1719,8 @@ $$:			PUSH	HL		; FILEINFO * fil
 ; Returns:
 ;   A: FRESULT
 ;
-ffs_api_flseek:		LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	BC 		; FSIZE_t ofs (msb)
+ffs_api_flseek:		CALL	FIX_HLU24
+			PUSH	BC 		; FSIZE_t ofs (msb)
 			PUSH	DE		; FSIZE_t ofs (lsw)
 			PUSH	HL		; FIL * fp
 			CALL	_f_lseek
@@ -1785,44 +1735,144 @@ $$:			PUSH	BC 		; FSIZE_t ofs (msb)
 ; Returns:
 ;   A: FRESULT
 ;
-ffs_api_ftruncate:
-			LD	A, MB
-			OR	A, A
-			JR	Z, $F
-			CALL	GET_AHL24
-			OR 	A, A
-			LD	A, MB
-			CALL	Z, SET_AHL24
-;
-$$:			PUSH	HL		; FIL * fp
+ffs_api_ftruncate:	CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
 			CALL	_f_truncate
 			LD	A, L
 			POP	HL
 			RET
 
-;
-; Commands that have not been implemented yet
+; Flush cached information of a writing file
+; HLU: Pointer to a FIL struct
+; Returns:
+;   A: FRESULT
 ;
 ffs_api_fsync:
+			CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			CALL	_f_sync
+			LD	A, L
+			POP	HL
+			RET
+
+ffs_api_fforward:	; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_fforward:
+ffs_api_fexpand:	; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_fexpand:
+
+; Read a string from a file
+; HLU: Pointer to a FIL struct
+; DEU: Pointer to target buffer to read string into
+; BCU: Buffer size
+; Returns:
+;   DEU: Pointer to target buffer or null if error
+;
+ffs_api_fgets:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	HL		; FILE * fp
+			PUSH	BC		; UINT len
+			PUSH	DE		; void * buff
+			CALL	_f_gets
+			LD	DE, HL		; Return value in DE
+			POP	HL
+			POP	BC
+			POP	BC
+			RET
+
+; Write a character to a file
+; HLU: Pointer to a FIL struct
+; C: Character to write
+; Returns:
+;  BCU: Number of bytes written
+;
+ffs_api_fputc:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			PUSH	BC		; TCHAR c
+			CALL	_f_putc
+			LD	BC, HL		; Return value in BCU
+			POP	HL
+			POP	HL
+			RET
+
+; Write a string to a file
+; HLU: Pointer to a FIL struct
+; DEU: Pointer to the string to write out
+; Returns:
+;  BCU: Number of bytes written
+;
+ffs_api_fputs:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	HL		; FIL * fp
+			PUSH	DE		; const TCHAR * str
+			CALL	_f_puts
+			LD	BC, HL		; Return value in BCU
+			POP	HL
+			POP	HL
+			RET
+
+ffs_api_fprintf:	; Available, but hard to expose as an API
 			JP mos_api_not_implemented
-ffs_api_fgets:
-			JP mos_api_not_implemented
-ffs_api_fputc:
-			JP mos_api_not_implemented
-ffs_api_fputs:
-			JP mos_api_not_implemented
-ffs_api_fprintf:
-			JP mos_api_not_implemented
-ffs_api_ftell:
-			JP mos_api_not_implemented
-ffs_api_fsize:
-			JP mos_api_not_implemented
-ffs_api_ferror:
-			JP mos_api_not_implemented
+
+; Get the current read/write pointer in a file
+; NB if FIL is not valid, this may return junk
+; HLU: Pointer to a FIL struct
+; Returns:
+;   C:DE: Current read/write pointer in the file (DWORD)
+; (clears BC before returning)
+;
+ffs_api_ftell:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			CALL	_fat_tell	; Returns position in E:HL
+; position returned is a DWORD (32 bits) which get returned as E:HL
+			LD	BC, 0		; Clear BC
+			LD	C, E
+			LD	DE, HL
+			POP	HL
+			RET
+
+; Check for EOF
+; HLU: Pointer to a FILINFO struct
+; Returns:
+;   A: 1 if end of file, otherwise 0
+;
+ffs_api_feof:		CALL	FIX_HLU24
+			PUSH	HL		; FILEINFO * fil
+			CALL	_fat_EOF
+			POP	HL
+			RET
+
+; Return size of file in bytes from the FIL struct
+; NB if FIL is not valid, this may return junk
+; HLU: Pointer to a FIL struct
+; Returns:
+;   C:DE: Size of file in bytes (DWORD)
+; (clears BC before returning)
+ffs_api_fsize:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			CALL	_fat_size	; Returns size in E:HL
+; size returned is a DWORD (32 bits) which get returned as E:HL
+			LD	BC, 0		; Clear BC
+			LD	C, E
+			LD	DE, HL
+			POP	HL
+			RET
+
+; Return `err` from the FIL struct
+; HLU: Pointer to a FIL struct
+; Returns:
+;   A: Error code
+;
+ffs_api_ferror:		CALL FIX_HLU24
+			PUSH	HL		; FIL * fp
+			CALL	_fat_error	; Returns err in A
+			POP	HL
+			RET
 
 ; Open a directory
 ; HLU: Pointer to a blank DIR struct
@@ -1877,24 +1927,140 @@ $$:
 			POP	DE
 			RET
 
-ffs_api_dfindfirst:
-			JP mos_api_not_implemented
-ffs_api_dfindnext:
-			JP mos_api_not_implemented
-ffs_api_unlink:
-			JP mos_api_not_implemented
-ffs_api_rename:
-			JP mos_api_not_implemented
+; Find the first file in a directory matching a pattern
+; HLU: Pointer to a blank DIR struct
+; DEU: Pointer to a blank FILINFO struct
+; BCU: Pointer to directory path
+; IXU: Pointer to matching pattern
+; Returns:
+;   A: FRESULT
+;
+ffs_api_dfindfirst:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_AHL24
+			CALL	SET_ADE24
+			CALL	SET_ABC24
+			CALL	SET_AIX24
+$$:			PUSH	IX		; const TCHAR * pattern
+			PUSH	BC		; const TCHAR * path
+			PUSH	DE		; FILINFO * fno
+			PUSH    HL		; DIR * dp
+			CALL	_f_findfirst
+			LD	A, L		; FRESULT
+			POP	HL
+			POP	DE
+			POP	BC
+			POP	IX
+			RET
+
+; Find the next file in a directory matching a pattern
+; HLU: Pointer to DIR struct from f_findfirst
+; DEU: Pointer to a FILINFO struct
+; Returns:
+;   A: FRESULT
+;
+ffs_api_dfindnext:	CALL	FIX_HLU24
+			PUSH	HL
+			LD	HL, DE
+			CALL	FIX_HLU24
+			EX	(SP), HL	; First stack entry is now DEU
+			PUSH	HL		; Second arg DIR
+			CALL	_f_findnext
+			LD	A, L		; FRESULT
+			POP	HL
+			POP	DE
+			RET
+
+; Check file exists
+; HLU: Pointer to a FILINFO struct
+; DEU: Pointer to the filename (0 terminated)
+; Returns:
+;   A: FRESULT
+;
+ffs_api_stat:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	HL		; FILEINFO * fil
+			PUSH	DE		; const TCHAR * path
+			CALL	_f_stat
+			LD	A, L 		; FRESULT
+			POP	DE
+			POP	HL
+			RET
+
+; Unlink a file using a filepath
+; HLU: Pointer to the path to unlink
+; Returns:
+;   A: FRESULT
+;
+ffs_api_unlink:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			CALL	NZ, SET_AHL24
+			PUSH	HL		; const TCHAR * path
+			CALL	_f_unlink
+			LD	A, L		; FRESULT
+			POP	HL
+			RET
+
+; renames and/or moves a file or sub-directory
+; HLU: Pointer to the old name (0 terminated)
+; DEU: Pointer to the new name (0 terminated)
+; Returns:
+;   A: FRESULT
+;
+ffs_api_rename:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+$$:			PUSH	DE		; const TCHAR * newname
+			PUSH	HL		; const TCHAR * oldname
+			CALL	_f_rename
+			LD	A, L		; FRESULT
+			POP	HL
+			POP	DE
+			RET
+
+; Currently f_chmod and f_utime are not supported in our FatFS configuration
 ffs_api_chmod:
 			JP mos_api_not_implemented
 ffs_api_utime:
 			JP mos_api_not_implemented
-ffs_api_mkdir:
+
+; Create a directory
+; HLU: Pointer to the directory path to create
+; Returns:
+;   A: FRESULT
+;
+ffs_api_mkdir:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			CALL	NZ, SET_AHL24	; Convert HL to an address in segment A (MB)
+			PUSH	HL		; const TCHAR * path
+			CALL	_f_mkdir
+			LD	A, L		; FRESULT
+			POP	HL
+			RET
+
+; Change the current directory
+; HLU: Pointer to the directory path to change to
+; Returns:
+;   A: FRESULT
+;
+ffs_api_chdir:		LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			CALL	NZ, SET_AHL24	; Convert HL to an address in segment A (MB)
+			PUSH	HL		; const TCHAR * path
+			CALL	_f_chdir
+			LD	A, L		; FRESULT
+			POP	HL
+			RET
+
+ffs_api_chdrive:	; Available but as we only support one drive, this is not useful
 			JP mos_api_not_implemented
-ffs_api_chdir:
-			JP mos_api_not_implemented
-ffs_api_chdrive:
-			JP mos_api_not_implemented
+
 ; Copy the current directory (string) into buffer (hl)
 ; HLU: Pointer to a buffer
 ; BCU: Maximum length of buffer
@@ -1913,17 +2079,90 @@ $$:
 			POP	BC
 			RET
 
-ffs_api_mount:
+; Mount a volume
+; HLU: Pointer to a blank FATFS struct (set to NULL for default)
+; DEU: Pointer to the volume path (0 terminated, set to NULL for default)
+;   C: Options byte
+; Returns:
+;   A: FRESULT
+;
+; NB in MOS 3 we will ignore all arguments, and just call mos_mount
+ffs_api_mount:		CALL	_mos_mount	; Call the mount function in MOS
+			RET
+
+ffs_api_mkfs:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_mkfs:
+ffs_api_fdisk:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
-ffs_api_fdisk:
-			JP mos_api_not_implemented
-ffs_api_getfree:
-			JP mos_api_not_implemented
-ffs_api_getlabel:
-			JP mos_api_not_implemented
-ffs_api_setlabel:
-			JP mos_api_not_implemented
-ffs_api_setcp:
+
+; Get the free space information
+; HLU: Path (ideally caller should set this to NULL)
+; DEU: Pointer to a block of memory to store number of free clusters, 32-bit value
+; BCU: Pointer to a block of memory to store cluster size, 32-bit value
+; Returns:
+;   A: FRESULT
+; NB this differs from a plain f_getfree call which takes a pointer for a FATFS object pointer
+; we return only the cluster size, as the object contents may change in future versions
+;
+ffs_api_getfree:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_ABC24
+			CALL	SET_ADE24
+			; path is optional, so check if it's zero - arguably we could/should zero it
+			LD	A, H
+			OR	A, L
+			JR	Z, $F
+			LD	A, MB
+			CALL	SET_AHL24
+$$:			PUSH	BC		; UINT32 * clusterSize
+			PUSH	DE		; UINT32 * clusters
+			PUSH	HL		; const TCHAR * path
+			CALL	_fat_getfree
+			LD	A, L		; FRESULT
+			POP	HL
+			POP	DE
+			POP	BC
+			RET
+
+; Get the label of a volume
+; HLU: Path (ideally caller should set this to NULL)
+; DEU: Pointer to a buffer to store the label in (12 bytes, 23 if we enable exfat)
+; BCU: Pointer to a block of memory to store the 32-bit volume serial number
+; Returns:
+;   A: FRESULT
+;
+ffs_api_getlabel:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_ABC24
+			CALL	SET_ADE24
+			; path is optional, so check if it's zero - arguably we could/should zero it
+			LD	A, H
+			OR	A, L
+			JR	Z, $F
+			LD	A, MB
+			CALL	SET_AHL24
+$$:			PUSH	BC		; UINT32 * vsn
+			PUSH	DE		; TCHAR * label
+			PUSH	HL		; const TCHAR * path
+			CALL	_f_getlabel
+			LD	A, L		; FRESULT
+			POP	HL
+			POP	DE
+			POP	BC
+			RET
+
+; Sets the label of a volume
+; HLU: New label
+; Returns:
+;   A: FRESULT
+;
+ffs_api_setlabel:	CALL	FIX_HLU24
+			PUSH	HL		; const TCHAR * label
+			CALL	_f_setlabel
+			LD	A, L		; FRESULT
+			POP	HL
+
+ffs_api_setcp:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented

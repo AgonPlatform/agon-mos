@@ -150,7 +150,11 @@ UINT24	mos_GETFIL(UINT8 fh);
 extern TCHAR	cwd[256];
 extern BOOL	sdcardDelay;
 
+UINT32	fat_tell(FIL * fp);
 UINT8	fat_EOF(FIL * fp);
+UINT32	fat_size(FIL * fp);
+UINT8	fat_error(FIL * fp);
+int		fat_getfree(const TCHAR * path, DWORD * clusters, DWORD * clusterSize);
 
 UINT8	wait_VDP(UINT8 mask);
 

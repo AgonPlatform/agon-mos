@@ -20,18 +20,19 @@
 
 			DEFINE .STARTUP, SPACE = ROM
 			SEGMENT .STARTUP
-							
+
 			XDEF	SWITCH_A
 			XDEF	SET_AHL24
-			XDEF	GET_AHL24
+			XDEF	FIX_HLU24
+			XDEF	FIX_HLU24_no_mb_check
 			XDEF	SET_ADE24
 			XDEF	SET_ABC24
 			XDEF	SET_AIX24
-			
+
 			XDEF	__exec16
 			XDEF	__exec24
 			XDEF	__wait_timer0 
-			
+
 			XDEF	_exec16			
 			XDEF	_exec24
 			XDEF	_wait_timer0
@@ -50,24 +51,35 @@ SWITCH_A:		EX	(SP), HL		; Swap HL with the contents of the top of the stack
 			LD	H, (HL)
 			LD	L, A
 			EX	(SP), HL		; Swap this new address back, restores HL
-			RET				; Return program control to this new address			
-			
+			RET				; Return program control to this new address
+
 ; Set the MSB of HL (U) to A
 ;
-SET_AHL24:		PUSH	HL			
+SET_AHL24:		PUSH	HL
 			LD	HL, 2
 			ADD	HL, SP
 			LD	(HL), A
 			POP	HL
 			RET	
 
-; Get the MSB of HL (U) in A
+; Optionally set MSB of HL(U) to MB, if needed
+; Sets U of HLU to MB if MB != 0 and U is not already set
 ;
-GET_AHL24:		PUSH	HL 
+FIX_HLU24:		LD	A, MB
+			OR	A
+			RET	Z
+; Get the MSB of HLU in A (pushing HLU to the stack)
+FIX_HLU24_no_mb_check:	PUSH	HL 
 			LD	HL, 2
 			ADD	HL, SP
 			LD	A, (HL)
-			POP	HL
+			OR 	A, A
+; top byte of HLU (on stack) already set so return
+			JR	NZ, $F
+; set top byte of HLU (on stack) to MB
+			LD	A, MB
+			LD	(HL), A
+$$:			POP	HL
 			RET
 
 ; Set the MSB of DE (U) to A
