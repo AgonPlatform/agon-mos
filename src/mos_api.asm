@@ -71,7 +71,8 @@
 			XREF	_mos_I2C_READ
 			XREF	_mos_mount
 
-			XREF	_fat_EOF		; In mos.c
+			XREF	_fat_tell		; In mos.c
+			XREF	_fat_EOF
 			XREF	_fat_size
 			XREF	_fat_error
 			XREF	_fat_getfree
@@ -1817,8 +1818,23 @@ $$:			PUSH	HL		; FIL * fp
 
 ffs_api_fprintf:	; Available, but hard to expose as an API
 			JP mos_api_not_implemented
-ffs_api_ftell:		; Available, but not a useful API to expose
-			JP mos_api_not_implemented
+
+; Get the current read/write pointer in a file
+; NB if FIL is not valid, this may return junk
+; HLU: Pointer to a FIL struct
+; Returns:
+;   C:DE: Current read/write pointer in the file (DWORD)
+; (clears BC before returning)
+;
+ffs_api_ftell:		CALL	FIX_HLU24
+			PUSH	HL		; FIL * fp
+			CALL	_fat_tell	; Returns position in E:HL
+; position returned is a DWORD (32 bits) which get returned as E:HL
+			LD	BC, 0		; Clear BC
+			LD	C, E
+			LD	DE, HL
+			POP	HL
+			RET
 
 ; Check for EOF
 ; HLU: Pointer to a FILINFO struct
@@ -2112,7 +2128,7 @@ $$:			PUSH	BC		; UINT32 * clusterSize
 ; Get the label of a volume
 ; HLU: Path (ideally caller should set this to NULL)
 ; DEU: Pointer to a buffer to store the label in (12 bytes, 23 if we enable exfat)
-; BCU: Pointer to a block of memory to store the 32-bit colume serial number
+; BCU: Pointer to a block of memory to store the 32-bit volume serial number
 ; Returns:
 ;   A: FRESULT
 ;

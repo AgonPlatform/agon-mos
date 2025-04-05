@@ -2931,6 +2931,10 @@ UINT24	mos_GETFIL(UINT8 fh) {
 	return 0;
 }
 
+UINT32 fat_tell(FIL * fp) {
+	return f_tell(fp);
+}
+
 // Check whether file is at EOF (end of file)
 // Parameters:
 // - fp: Pointer to file structure
