@@ -122,10 +122,12 @@ int getDirectoryForPath(char * srcPath, char * dir, int * length, BYTE searchInd
 }
 
 bool checkAttribute(BYTE attribute, BYTE flags) {
-	if (flags & 0x80) {
+	bool matchAll = flags & RESOLVE_MATCH_ALL_ATTRIBS;
+	flags = flags & (AM_ARC | AM_DIR | AM_RDO | AM_SYS | AM_HID);
+
+	if (matchAll) {
 		// top bit set means we are looking for a complete flag/attribute match
 		// i.e. all requested attributes must be set.  extra attributes that may be set are ignored
-		flags = flags & (AM_ARC | AM_DIR | AM_RDO | AM_SYS | AM_HID);
 		return (flags & attribute == flags);
 	}
 	// otherwise we are excluding if one of the flags is set
@@ -212,14 +214,26 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index, BYTE f
 // FR_NO_PATH if the path was not found
 // Or an error code if an error occurred
 //
-int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir, BYTE flags) {
+int resolvePath(char * argpath, char * resolvedPath, int * length, BYTE * index, DIR * dir, BYTE flags) {
 	int result = FR_OK;
 	DIR * localDir = NULL;
 	FILINFO fileinfo;
 	BYTE prefixIndex = index ? *index : 0;
 	bool newSearch = prefixIndex == 0;
 	bool lengthCheck = resolvedPath == NULL;
-	char * leafname = getFilepathLeafname(filepath);
+	char * filepath;
+	char * leafname;
+
+	if (flags & RESOLVE_OMIT_EXPAND) {
+		filepath = argpath;
+	} else {
+		filepath = expandMacro(argpath);
+		if (filepath == NULL) {
+			return FR_INVALID_PARAMETER;		// couldn't expand path, so report an error
+		}
+	}
+
+	leafname = getFilepathLeafname(filepath);
 
 	if (lengthCheck) {
 		return getLengthForResolvedPath(filepath, length, NULL, flags);
@@ -228,6 +242,9 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 	if (dir == NULL) {
 		localDir = umm_malloc(sizeof(DIR));
 		if (localDir == NULL) {
+			if (filepath != argpath) {
+				umm_free(filepath);
+			}
 			return MOS_OUT_OF_MEMORY;
 		}
 		dir = localDir;
@@ -240,21 +257,10 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 
 	if (!newSearch) {
 		result = f_findnext(dir, &fileinfo);
-		if (result != FR_OK) {
-			// something is broken
-			umm_free(localDir);
-			return result;
-		}
-		// check attributes, moving on next match if they don't pass
-		while (fileinfo.fname[0] != '\0' && !checkAttribute(fileinfo.fattrib, flags)) {
+		while (result == FR_OK && fileinfo.fname[0] != '\0' && !checkAttribute(fileinfo.fattrib, flags)) {
 			result = f_findnext(dir, &fileinfo);
-			if (result != FR_OK) {
-				// something is broken
-				umm_free(localDir);
-				return result;
-			}
 		}
-		if (fileinfo.fname[0] == '\0') {
+		if (result != FR_OK || fileinfo.fname[0] == '\0') {
 			// we need to move on to the next directory
 			newSearch = true;
 			result = FR_NO_PATH;	// default our result to no path
@@ -264,27 +270,24 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 			int pathLength = 0;
 			// our prefixIndex should be the prefix *after* the one we are using, or zero if none set
 			result = getDirectoryForPath(filepath, NULL, &pathLength, prefixIndex > 0 ? prefixIndex - 1 : 0);
-			if (result != FR_OK) {
-				// something went wrong
-				umm_free(localDir);
-				return result;
+			if (result == FR_OK) {
+				pathLength += strlen(fileinfo.fname);
+				if (pathLength <= *length) {
+					result = getDirectoryForPath(filepath, resolvedPath, &pathLength, prefixIndex > 0 ? prefixIndex - 1 : 0);
+					if (result == FR_OK) {
+						// append the found/resolved file name onto the resolved directory
+						sprintf(resolvedPath, "%s%s", resolvedPath, fileinfo.fname);
+						*length = pathLength;
+					}
+				} else {
+					result = MOS_OUT_OF_MEMORY;
+				}	
 			}
-			pathLength += strlen(fileinfo.fname);
-
-			if (pathLength <= *length) {
-				result = getDirectoryForPath(filepath, resolvedPath, &pathLength, prefixIndex > 0 ? prefixIndex - 1 : 0);
-				if (result != FR_OK) {
-					// something went wrong
-					umm_free(localDir);
-					return result;
-				}
-				sprintf(resolvedPath, "%s%s", resolvedPath, fileinfo.fname);
-				*length = pathLength;
-			} else {
-				// not enough space
-				umm_free(localDir);
-				return MOS_OUT_OF_MEMORY;
+			umm_free(localDir);
+			if (filepath != argpath) {
+				umm_free(filepath);
 			}
+			return result;
 		}
 	}
 
@@ -356,6 +359,9 @@ int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index
 	}
 
 	umm_free(localDir);
+	if (filepath != argpath) {
+		umm_free(filepath);
+	}
 	return result;
 }
 
@@ -451,16 +457,16 @@ bool isMoslet(char * filepath) {
 
 // Get the resolved path for a given path
 // Calling function is responsible for freeing the resolvedPath
-int getResolvedPath(char * source, char ** resolvedPath) {
+int getResolvedPath(char * source, char ** resolvedPath, BYTE flags) {
 	int length = 0;
-	int result = resolvePath(source, NULL, &length, NULL, NULL, 0);
+	int result = resolvePath(source, NULL, &length, NULL, NULL, flags);
 	if (result == FR_OK || result == FR_NO_FILE) {
 		length++;
 		*resolvedPath = umm_malloc(length);
 		if (*resolvedPath == NULL) {
 			return MOS_OUT_OF_MEMORY;
 		}
-		result = resolvePath(source, *resolvedPath, &length, NULL, NULL, 0);
+		result = resolvePath(source, *resolvedPath, &length, NULL, NULL, flags);
 	}
 	return result;
 }

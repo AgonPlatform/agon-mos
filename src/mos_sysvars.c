@@ -1024,19 +1024,6 @@ char * expandVariableToken(char * token) {
 	return expandVariable(var, false);
 }
 
-int expandPath(char * source, char ** resolvedPath) {
-	// Expand path, and resolve it
-	int result = FR_INT_ERR;
-	char * path = NULL;
-	char * expanded = expandMacro(source);
-	if (expanded == NULL) {
-		return result;
-	}
-	result = getResolvedPath(expanded, resolvedPath);
-	umm_free(expanded);
-	return result;
-}
-
 // For this to work as an API, it will need to change
 // it should return a status result value, and accept in parameters to allow this routine to return
 // both a pointer to a buffer for the result value, and a pointer to an integer for the the type of the result

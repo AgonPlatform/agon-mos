@@ -105,8 +105,6 @@ char *	expandVariable(t_mosSystemVariable * var, bool showWriteOnly);
 
 char *	expandVariableToken(char * token);
 
-int		expandPath(char * source, char ** resolvedPath);
-
 t_mosEvalResult * evaluateExpression(char * source);
 
 char *  getArgument(char * source, int argNo, char ** end);

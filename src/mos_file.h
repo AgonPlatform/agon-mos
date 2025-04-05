@@ -6,6 +6,9 @@
 
 extern TCHAR	cwd[256];
 
+#define RESOLVE_OMIT_EXPAND			0x40
+#define RESOLVE_MATCH_ALL_ATTRIBS	0x80
+
 BOOL isDirectory(char *path);
 char * getFilepathPrefixEnd(char * filepath);
 char * getFilepathLeafname(char * filepath);
@@ -13,7 +16,7 @@ int getDirectoryForPath(char * srcPath, char * dir, int * length, BYTE index);
 int resolvePath(char * filepath, char * resolvedPath, int * length, BYTE * index, DIR * dir, BYTE flags);
 int resolveRelativePath(char * path, char * resolved, int length);
 bool isMoslet(char * filepath);
-int getResolvedPath(char * source, char ** resolvedPath);
+int getResolvedPath(char * source, char ** resolvedPath, BYTE flags);
 int copyFile(char * source, char * dest);
 
 #endif MOS_FILE_H

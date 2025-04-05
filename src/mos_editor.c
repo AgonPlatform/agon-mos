@@ -577,7 +577,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 											sprintf(searchTerm, "run:%.*s*.bin", termLength, termStart);
 										}
 										resolveLength = bufferLength;
-										fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS);
+										fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS | RESOLVE_OMIT_EXPAND);
 										if (fr == FR_OK) {
 											char * sourceLeaf = getFilepathLeafname(searchTerm);
 											int sourceOffset = sourceLeaf - searchTerm;
@@ -603,7 +603,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 								sprintf(searchTerm, "%.*s*", termLength, termStart);
 								resolveLength = bufferLength;
 								// Find file, omitting hidden/system files
-								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS);
+								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS | RESOLVE_OMIT_EXPAND);
 								if (fr == FR_OK) {
 									char * sourceLeaf = getFilepathLeafname(searchTerm);
 									int sourceOffset = sourceLeaf - searchTerm;
