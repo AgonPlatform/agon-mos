@@ -69,8 +69,8 @@ extern int 		exec24(UINT24 addr, char * params);	// In misc.asm
 
 extern BYTE scrcols, scrcolours, scrpixelIndex; // In globals.asm
 extern volatile	BYTE keyascii;					// In globals.asm
-extern volatile	BYTE vpd_protocol_flags;		// In globals.asm
 extern BYTE 	rtc;							// In globals.asm
+extern volatile BYTE vpd_protocol_flags;		// In globals.asm
 
 static FATFS	fs;					// Handle for the file system
 
@@ -2958,6 +2958,23 @@ int mos_mount(void) {
 		strcpy(cwd, "No SD card present");
 	}
 	return ret;
+}
+
+// Wait for the VDP packet to come in, with a timeout
+// Parameters:
+// - mask: Mask for the protocol bits to match (packet types)
+// Returns:
+// - status code (FR_OK or FR_TIMEOUT)
+//
+UINT8 wait_VDP(UINT8 mask) {
+	int i;
+
+	for (i = 0; i < 250000; i++) {				// A small delay loop (~1s)
+		if ((vpd_protocol_flags & mask) == mask) {
+			return FR_OK;
+		}
+	}
+	return FR_TIMEOUT;
 }
 
 // Support functions for code-type system variables

@@ -106,6 +106,11 @@ mos_getleafname:	EQU	3Ah
 mos_isdirectory:	EQU	3Bh
 mos_getabsolutepath:	EQU	3Ch
 
+; VDP Protocol apis
+;
+mos_clearvdpflags:	EQU	40h
+mos_waitforvdpflags:	EQU	41h
+
 ; FatFS file access functions
 ;
 ffs_fopen:		EQU	80h

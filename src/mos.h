@@ -152,6 +152,8 @@ extern BOOL	sdcardDelay;
 
 UINT8	fat_EOF(FIL * fp);
 
+UINT8	wait_VDP(UINT8 mask);
+
 
 #define MOS_DIR_LONG_LISTING		1
 #define MOS_DIR_SHOW_HIDDEN			2

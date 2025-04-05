@@ -8,7 +8,6 @@
 #include "ff.h"
 #include "umm_malloc.h"
 
-// TODO renumber these flags and split between number and string
 #define EXTRACT_FLAG_DECIMAL_ONLY	(1 << 0)
 #define EXTRACT_FLAG_POSITIVE_ONLY	(1 << 1)
 #define EXTRACT_FLAG_H_SUFFIX_HEX	(1 << 2)
