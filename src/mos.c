@@ -1450,6 +1450,11 @@ int mos_cmdSHOW(char * ptr) {
 		token = "*";
 	}
 
+	// Turn on temporary paged mode
+	putch(23);
+	putch(0);
+	putch(0x9A);
+
 	while (getSystemVariable(token, &var) == 0) {
 		printf("%s", var->label);
 		switch (var->type) {
@@ -1740,6 +1745,11 @@ int mos_cmdHELP(char *ptr) {
 	} else if (result != FR_OK) {
 		return result;
 	}
+
+	// Turn on temporary paged mode
+	putch(23);
+	putch(0);
+	putch(0x9A);
 
 	if (strcasecmp(cmd, "all") == 0) {
 		for (i = 0; i < mosCommands_count; ++i) {
@@ -2076,6 +2086,11 @@ UINT24	mos_DIRFallback(char * dirPath, char * pattern, BYTE flags) {
 	bool	hideVolumeInfo = flags & MOS_DIR_HIDE_VOLUME_INFO;
 	bool	usePattern = pattern != NULL;
 
+	// Turn on temporary paged mode
+	putch(23);
+	putch(0);
+	putch(0x9A);
+
 	if (!hideVolumeInfo) {
 		fr = f_getlabel("", volume, 0);
 		if (fr != FR_OK) {
@@ -2222,6 +2237,11 @@ UINT24 displayDirectory(char * dirPath, char * pattern, BYTE flags) {
 
 		qsort(filesInfo, entryCount, sizeof(SmallFilInfo), cmp_filinfo);
 		fileNum = 0;
+
+		// Turn on temporary paged mode
+		putch(23);
+		putch(0);
+		putch(0x9A);
 
 		while (fileNum < entryCount) {
 			bool isDir;
