@@ -1235,14 +1235,23 @@ int mos_cmdLOADFILE(char *ptr) {
 // - MOS error code
 //
 int mos_cmdRUN(char *ptr) {
-	UINT24	addr;
+	UINT24	addr = 0;
 	int		result;
-
-	if (!extractNumber(ptr, &ptr, NULL, (int *)&addr, 0)) {
+	
+	// First argument should be a number, and if not should be absent, or a `.` for "default address"
+	if (!extractNumber(ptr, &ptr, NULL, (int *)&addr, 0) &&
+		(*ptr == '\0' || (*ptr =='.' && (ptr[1] == '\0' || ptr[1] == ' ')))
+	) {
 		addr = MOS_defaultLoadAddress;
+		if (*ptr == '.') {
+			ptr++;
+		}
 	}
 	// For compatibility we will trim trailing spaces from arguments
 	ptr = mos_trim(ptr, false, true);
+	if (addr == 0) {
+		return FR_INVALID_PARAMETER;
+	}
 	result = mos_runBin(addr, ptr);
 	return result;
 }
