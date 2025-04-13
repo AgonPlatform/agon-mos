@@ -21,4 +21,12 @@ BYTE	SD_writeBlocks(DWORD addr, BYTE *buf, WORD count);
 
 BYTE	SD_init();
 
+BYTE	SD_readBlocks_API(DWORD * addr, BYTE *buf, WORD count) {
+	return SD_readBlocks(*addr, buf, count);
+}
+
+BYTE	SD_writeBlocks_API(DWORD * addr, BYTE *buf, WORD count) {
+	return SD_writeBlocks(*addr, buf, count);
+}
+
 #endif SD_H

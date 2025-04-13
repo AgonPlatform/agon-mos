@@ -139,6 +139,10 @@
 			XREF	_isDirectory
 			XREF	_resolveRelativePath
 
+			XREF	_SD_init		; In sd.asm
+			XREF	_SD_readBlocks_API	; In sd.h
+			XREF	_SD_writeBlocks_API	; In sd.h
+
 ; Call a MOS API function
 ; 00h - 7Fh: Reserved for high level MOS calls
 ; 80h - FFh: Reserved for low level calls to FatFS
@@ -269,9 +273,9 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_not_implemented	; 0x6e
 			DW	mos_api_not_implemented	; 0x6f
 
-			DW	mos_api_not_implemented	; 0x70
-			DW	mos_api_not_implemented	; 0x71
-			DW	mos_api_not_implemented	; 0x72
+			DW	sd_api_init		; 0x70
+			DW	sd_api_readblocks	; 0x71
+			DW	sd_api_writeblocks	; 0x72
 			DW	mos_api_not_implemented	; 0x73
 			DW	mos_api_not_implemented	; 0x74
 			DW	mos_api_not_implemented	; 0x75
@@ -2200,4 +2204,53 @@ $$:			PUSH	DE		; DWORD * offset
 			CALL	_fat_lseek	; FRESULT returned in A
 			POP	HL
 			POP	DE
+			RET
+
+; Expose raw SD card access APIs
+;
+; Initialise SD card interface
+; Returns:
+; - A: 0 if OK/Ready, 1 for error
+sd_api_init:		JP	_SD_init	; Just jump, allowing it to return directly
+
+; Read raw blocks from SD card
+; HLU: Pointer to DWORD for block address/offset
+; DEU: Pointer to buffer to read into
+; BC: Number of blocks to read
+; Returns:
+; - A: 0 if OK, 1 for error
+; BYTE SD_readBlocks_API(DWORD * addr, BYTE *buf, WORD count)
+sd_api_readblocks:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
+$$:			PUSH	BC		; WORD count
+			PUSH	DE		; BYTE * buf
+			PUSH	HL		; DWORD * addr
+			CALL	_SD_readBlocks_API
+			POP	HL
+			POP	DE
+			POP	BC
+			RET
+
+; Write raw blocks to SD card
+; HLU: Pointer to DWORD for block address/offset
+; DEU: Pointer to buffer to write from
+; BC: Number of blocks to write
+; Returns:
+; - A: 0 if OK, 1 for error
+; BYTE SD_writeBlocks_API(DWORD * addr, BYTE *buf, WORD count)
+sd_api_writeblocks:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
+$$:			PUSH	BC		; WORD count
+			PUSH	DE		; BYTE * buf
+			PUSH	HL		; DWORD * addr
+			CALL	_SD_readBlocks_API
+			POP	HL
+			POP	DE
+			POP	BC
 			RET
