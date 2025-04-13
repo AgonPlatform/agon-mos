@@ -2835,6 +2835,17 @@ UINT8	mos_FLSEEK(UINT8 fh, UINT32 offset) {
 	return FR_INVALID_OBJECT;
 }
 
+// Alternative FLSEEK function that uses a pointer to the 32-bit offset value
+// Parameters:
+// - fh: File handle
+// - offset: Pointer to the position of the pointer relative to the start of the file
+// Returns:
+// - FRESULT
+//
+UINT8 mos_FLSEEKP(UINT8 fh, DWORD * offset) {
+	return mos_FLSEEK(fh, *offset);
+}
+
 // Check whether file is at EOF (end of file)
 // Parameters:
 // - fh: File handle
@@ -2991,6 +3002,13 @@ UINT8 fat_size(FIL * fp, DWORD * size) {
 
 UINT8 fat_error(FIL * fp) {
 	return f_error(fp);
+}
+
+UINT8 fat_lseek(FIL * fp, DWORD * offset) {
+	if (fp == NULL || offset == NULL) {
+		return FR_INVALID_PARAMETER;
+	}
+	return f_lseek(fp, *offset);
 }
 
 int fat_getfree(const TCHAR * path, DWORD * clusters, DWORD * clusterSize) {

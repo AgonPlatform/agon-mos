@@ -137,6 +137,7 @@ void	mos_FPUTC(UINT8 fh, char c);
 UINT24	mos_FREAD(UINT8 fh, UINT24 buffer, UINT24 btr);
 UINT24	mos_FWRITE(UINT8 fh, UINT24 buffer, UINT24 btw);
 UINT8  	mos_FLSEEK(UINT8 fh, UINT32 offset);
+UINT8	mos_FLSEEKP(UINT8 fh, DWORD * offset);
 UINT8	mos_FEOF(UINT8 fh);
 
 void 	mos_GETERROR(UINT8 errno, UINT24 address, UINT24 size);
@@ -154,6 +155,7 @@ UINT8	fat_tell(FIL * fp, DWORD * offset);
 UINT8	fat_EOF(FIL * fp);
 UINT8	fat_size(FIL * fp, DWORD * size);
 UINT8	fat_error(FIL * fp);
+UINT8	fat_lseek(FIL * fp, DWORD * offset);
 int		fat_getfree(const TCHAR * path, DWORD * clusters, DWORD * clusterSize);
 
 UINT8	wait_VDP(UINT8 mask);

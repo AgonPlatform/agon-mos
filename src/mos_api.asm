@@ -65,6 +65,7 @@
 			XREF	_mos_FREAD
 			XREF	_mos_FWRITE
 			XREF	_mos_FLSEEK
+			XREF	_mos_FLSEEKP
 			XREF	_mos_I2C_OPEN
 			XREF	_mos_I2C_CLOSE
 			XREF	_mos_I2C_WRITE
@@ -75,6 +76,7 @@
 			XREF	_fat_EOF
 			XREF	_fat_size
 			XREF	_fat_error
+			XREF	_fat_lseek
 			XREF	_fat_getfree
 			XREF	_wait_VDP
 
@@ -184,8 +186,8 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_i2c_write	; 0x21
 			DW	mos_api_i2c_read	; 0x22
 			DW	mos_api_unpackrtc	; 0x23
+			DW	mos_api_flseek_p	; 0x24
 
-			DW	mos_api_not_implemented	; 0x24
 			DW	mos_api_not_implemented	; 0x25
 			DW	mos_api_not_implemented	; 0x26
 			DW	mos_api_not_implemented	; 0x27
@@ -329,6 +331,7 @@ mos_api_block2_start:	DW	ffs_api_fopen		; 0x80
 			DW	ffs_api_getlabel	; 0xA3
 			DW	ffs_api_setlabel	; 0xA4
 			DW	ffs_api_setcp		; 0xA5
+			DW	ffs_api_flseek_p	; 0xA6
 
 mos_api_block2_size:	EQU 	($ - mos_api_block2_start) / 2
 
@@ -1038,13 +1041,26 @@ mos_api_fwrite:		LD	A, MB		; Check if MBASE is 0
 ;   A: FRESULT
 ;
 mos_api_flseek:		PUSH 	DE		; UINT32 offset (msb)
-			PUSH	HL 		; UINT32 offset (lsb)
+			PUSH	HL		; UINT32 offset (lsb)
 			PUSH	BC		; UINT8 fh
-			CALL	_mos_FLSEEK
-			LD	A, L 		; FRESULT
+			CALL	_mos_FLSEEK	; Returns 8-bit FRESULT in A
 			POP	BC
 			POP	HL
 			POP	DE
+			RET
+
+; Move the read/write pointer in a file, using pointer to offset value
+;   C: Filehandle
+; HLU: Pointer to the offset value from the start of the file (DWORD)
+; Returns:
+;   A: FRESULT
+;
+mos_api_flseek_p:	CALL	FIX_HLU24	; Fix the HLU to ensure it's a 24-bit pointer
+			PUSH	HL		; DWORD * offset
+			PUSH	BC		; UINT8 fh
+			CALL	_mos_FLSEEKP
+			POP	BC
+			POP	HL
 			RET
 
 
@@ -2171,3 +2187,21 @@ ffs_api_setlabel:	CALL	FIX_HLU24
 
 ffs_api_setcp:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
+
+; Move the read/write pointer in a file
+; HLU: Pointer to a FIL struct
+; DEU: Pointer to a 32-bit value for to move the file pointer/offset to
+; Returns:
+;   A: FRESULT
+;
+ffs_api_flseek_p:	LD	A, MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	DE		; DWORD * offset
+			PUSH	HL		; FIL * fp
+			CALL	_fat_lseek	; FRESULT returned in A
+			POP	HL
+			POP	DE
+			RET
