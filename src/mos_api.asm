@@ -956,7 +956,6 @@ mos_api_uopen:		LEA	HL, IX + 0	; HLU: Pointer to struct
 			CALL	NZ, SET_AHL24 	; Convert to a 24-bit absolute pointer
 			PUSH	HL		; UART * pUART
 			CALL	_open_UART1	; Initialise the UART port
-			LD	A, L 		; The return value is in HLU
 			POP	HL 		; Tidy up the stack
 			RET
 
@@ -1164,7 +1163,7 @@ $$:			PUSH	BC		; BYTE flags
 ; - HLU: Number extracted
 ; - DEU: Address of next character after end of number
 ;
-; bool	extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags)
+; uint8_t	extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags)
 mos_api_extractnumber:
 			PUSH	BC		; BYTE flags
 			LD	A, MB		; Check if MBASE is 0
@@ -1184,8 +1183,7 @@ $$:			PUSH	HL
 			LD	HL, _scratchpad + 3
 			EX	(SP), HL	; char ** end
 			PUSH	HL		; char * source
-			CALL	_extractNumber	; Call the C function extractNumber
-			LD	A, L		; Save return value in HLU, in A
+			CALL	_extractNumber	; Call the C function extractNumber. A will be true/false (1 or 0)
 			POP	HL
 			POP	HL
 			POP	HL
@@ -1579,7 +1577,6 @@ mos_api_isdirectory:
 			CALL	SET_AHL24	; HL is required, so set it
 $$:			PUSH	HL		; char * filepath
 			CALL	_isDirectory	; Call the C function isDirectory
-			LD	A, L		; Return value in HLU, put in A
 			POP	HL
 			; return value is true/false, so we need to change to 0 for success, and 19 (invalid parameter) for failure
 			OR	A, A		; Was status value false?
@@ -2140,7 +2137,6 @@ $$:			PUSH	BC		; UINT32 * clusterSize
 			PUSH	DE		; UINT32 * clusters
 			PUSH	HL		; const TCHAR * path
 			CALL	_fat_getfree
-			LD	A, L		; FRESULT
 			POP	HL
 			POP	DE
 			POP	BC

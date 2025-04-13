@@ -9,7 +9,7 @@ extern TCHAR	cwd[256];
 #define RESOLVE_OMIT_EXPAND			0x40
 #define RESOLVE_MATCH_ALL_ATTRIBS	0x80
 
-BOOL isDirectory(char *path);
+uint8_t isDirectory(char *path);
 char * getFilepathPrefixEnd(char * filepath);
 char * getFilepathLeafname(char * filepath);
 int getDirectoryForPath(char * srcPath, char * dir, int * length, BYTE index);

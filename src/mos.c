@@ -3011,9 +3011,9 @@ UINT8 fat_lseek(FIL * fp, DWORD * offset) {
 	return f_lseek(fp, *offset);
 }
 
-int fat_getfree(const TCHAR * path, DWORD * clusters, DWORD * clusterSize) {
+UINT8 fat_getfree(const TCHAR * path, DWORD * clusters, DWORD * clusterSize) {
 	FATFS * fs = NULL;
-	int result;
+	UINT8 result;
 	if (clusters == NULL || clusterSize == NULL) {
 		return FR_INVALID_PARAMETER;
 	}
