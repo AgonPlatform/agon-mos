@@ -1819,21 +1819,23 @@ $$:			PUSH	HL		; FIL * fp
 ffs_api_fprintf:	; Available, but hard to expose as an API
 			JP mos_api_not_implemented
 
-; Get the current read/write pointer in a file
-; NB if FIL is not valid, this may return junk
+; Get the current read/write pointer/offset in a file
+; NB if FIL is not valid, this may return junk, and DE is also not fully checked for validity
 ; HLU: Pointer to a FIL struct
+; DEU: Pointer to a 32-bit value to store the returned pointer/offset in
 ; Returns:
-;   C:DE: Current read/write pointer in the file (DWORD)
-; (clears BC before returning)
+;   A: FRESULT (FR_OK or FR_INVALID_PARAMETER)
 ;
-ffs_api_ftell:		CALL	FIX_HLU24
+ffs_api_ftell:		LD	A, MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	DE		; DWORD * offset
 			PUSH	HL		; FIL * fp
-			CALL	_fat_tell	; Returns position in E:HL
-; position returned is a DWORD (32 bits) which get returned as E:HL
-			LD	BC, 0		; Clear BC
-			LD	C, E
-			LD	DE, HL
+			CALL	_fat_tell	; FRESULT returned in A
 			POP	HL
+			POP	DE
 			RET
 
 ; Check for EOF
@@ -1848,19 +1850,22 @@ ffs_api_feof:		CALL	FIX_HLU24
 			RET
 
 ; Return size of file in bytes from the FIL struct
-; NB if FIL is not valid, this may return junk
+; NB if FIL is not valid, this may return junk, and DE is also not fully checked for validity
 ; HLU: Pointer to a FIL struct
+; DEU: Pointer to a 32-bit value to store the returned size in
 ; Returns:
-;   C:DE: Size of file in bytes (DWORD)
-; (clears BC before returning)
-ffs_api_fsize:		CALL	FIX_HLU24
+;   A: FRESULT (FR_OK or FR_INVALID_PARAMETER)
+;
+ffs_api_fsize:		LD	A, MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	DE		; DWORD * size
 			PUSH	HL		; FIL * fp
-			CALL	_fat_size	; Returns size in E:HL
-; size returned is a DWORD (32 bits) which get returned as E:HL
-			LD	BC, 0		; Clear BC
-			LD	C, E
-			LD	DE, HL
+			CALL	_fat_size	; FRESULT returned in A
 			POP	HL
+			POP	DE
 			RET
 
 ; Return `err` from the FIL struct
@@ -1868,7 +1873,7 @@ ffs_api_fsize:		CALL	FIX_HLU24
 ; Returns:
 ;   A: Error code
 ;
-ffs_api_ferror:		CALL FIX_HLU24
+ffs_api_ferror:		CALL	FIX_HLU24
 			PUSH	HL		; FIL * fp
 			CALL	_fat_error	; Returns err in A
 			POP	HL
