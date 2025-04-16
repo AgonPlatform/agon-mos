@@ -2276,6 +2276,22 @@ $$:			PUSH	BC		; WORD count
 			POP	BC
 			RET
 
+; C calling convention functions
+
+; Get a pointer to a system variable
+; Returns:
+; HLU: Pointer to system variables (see mos_api.asm for more details)
+;
+func_getsysvars:	LD	HL, _sysvars
+			RET
+
+; Get the address of the keyboard map
+; Returns:
+; HLU: Base address of the keymap
+;
+func_getkbmap:		LD	HL, _keymap
+			RET
+
 ; Get function
 ; Only usable for code in ADL mode
 ; C: Flags (must be zero for now)
@@ -2335,6 +2351,7 @@ mos_function_block_start:
 			DW24	_resolvePath	; 0x0D
 			DW24	_getDirectoryForPath	; 0x0E
 			DW24	_resolveRelativePath	; 0x0F
-
+			DW24	func_getsysvars	; 0x10
+			DW24	func_getkbmap	; 0x11
 
 mos_function_block_size:	EQU 	($ - mos_function_block_start) / 3
