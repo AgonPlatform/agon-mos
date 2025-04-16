@@ -2325,5 +2325,16 @@ mos_function_block_start:
 			DW24	0		; 0x03 (reserved for potential future _SD_status function)
 			DW24	0		; 0x04 (reserved for potential future _SD_ioctl function)
 			DW24	_f_printf	; 0x05
+			DW24	_f_findfirst	; 0x06
+			DW24	_f_findnext	; 0x07
+			DW24	_open_UART1	; 0x08
+			DW24	_setVarVal	; 0x09
+			DW24	_readVarVal	; 0x0A
+			DW24	_gsTrans	; 0x0B
+			DW24	_substituteArgs	; 0x0C
+			DW24	_resolvePath	; 0x0D
+			DW24	_getDirectoryForPath	; 0x0E
+			DW24	_resolveRelativePath	; 0x0F
+
 
 mos_function_block_size:	EQU 	($ - mos_function_block_start) / 3
