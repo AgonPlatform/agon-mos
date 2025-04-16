@@ -105,6 +105,7 @@
 			XREF	_f_gets
 			XREF	_f_putc
 			XREF	_f_puts
+			XREF	_f_printf
 			XREF	_f_opendir
 			XREF	_f_closedir
 			XREF	_f_readdir
@@ -143,6 +144,9 @@
 			XREF	_SD_init_API
 			XREF	_SD_readBlocks_API
 			XREF	_SD_writeBlocks_API
+			XREF	_SD_init
+			XREF	_SD_readBlocks
+			XREF	_SD_writeBlocks
 
 ; Call a MOS API function
 ; 00h - 7Fh: Reserved for high level MOS calls
@@ -240,7 +244,7 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_not_implemented	; 0x4e
 			DW	mos_api_not_implemented	; 0x4f
 
-			DW	mos_api_not_implemented	; 0x50
+			DW	mos_api_getfunction	; 0x50
 			DW	mos_api_not_implemented	; 0x51
 			DW	mos_api_not_implemented	; 0x52
 			DW	mos_api_not_implemented	; 0x53
@@ -2271,3 +2275,55 @@ $$:			PUSH	BC		; WORD count
 			POP	DE
 			POP	BC
 			RET
+
+; Get function
+; Only usable for code in ADL mode
+; C: Flags (must be zero for now)
+; B: Function number
+; Returns:
+; - A: 0 (OK), 19 (Invalid parameter), 20 (Invalid command - called from Z80 mode)
+; - HL: Pointer to function (or 0 if invalid)
+;
+mos_api_getfunction:	LD	HL, 0		; Set HL to 0 (no function) as default
+			LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			LD	A, 20		; Invalid command (called from Z80 mode)
+			RET			; Return with error code 20 (Invalid command)
+$$:			LD	A, C		; Get flags
+			OR	A, A		; Check if flags are set
+			JR	Z, $F		; Only support no flags for now
+			LD	A, 19		; Invalid parameter (flags set)
+			RET			; Return with error code 19 (Invalid parameter)
+$$:			LD	A, B		; Get function number
+			CP	mos_function_block_size	; Check if out of bounds
+			JR	C, $F
+			LD	A, 19		; Invalid parameter (function number out of bounds)
+			RET			; Return with error code 19 (Invalid parameter)
+$$:			; Get function address
+			; first we need to triple A to get the correct offset in the function table
+			PUSH	BC		; Save BC
+			PUSH	IX		; Save IX
+			LD	A, B		; Get function number
+			LD	BC, 0		; Set BC to 0
+			LD	C, A		; Set BC to function number
+			LD	IX, BC		; Copy to IX
+			ADD	IX, IX		; IX = 2 * function number
+			ADD	IX, BC		; IX = 3 * function number
+			LD	BC, mos_function_block_start	; BC = start of function table
+			ADD	IX, BC		; IX = address of function pointer in table
+			LD	HL, (IX)	; Get function pointer from table
+			POP	IX		; Restore IX
+			POP	BC		; Restore BC
+			LD	A, 0		; Set A to 0 (OK)
+			RET			; Return with OK code
+
+mos_function_block_start:
+			DW24	_SD_init	; 0x00
+			DW24	_SD_readBlocks	; 0x01
+			DW24	_SD_writeBlocks	; 0x02
+			DW24	0		; 0x03 (reserved for potential future _SD_status function)
+			DW24	0		; 0x04 (reserved for potential future _SD_ioctl function)
+			DW24	_f_printf	; 0x05
+
+mos_function_block_size:	EQU 	($ - mos_function_block_start) / 3
