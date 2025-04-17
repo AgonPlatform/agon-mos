@@ -12,6 +12,9 @@
 
 #if DEBUG > 0
 
+// TODO some of the functions tested here have had their arguments slightly changed
+// e.g. resolveRelativePath now takes a pointer for length
+
 #define MG_MAX_ITEMS	64
 #define MG_ITERS 1000
 struct mg_item_t {

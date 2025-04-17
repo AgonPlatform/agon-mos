@@ -108,8 +108,8 @@ t_mosEvalResult * evaluateExpression(char * source);
 
 char *  getArgument(char * source, int argNo, char ** end);
 
-int substituteArgs(char * template, char * args, char * dest, int length, bool omitRest);
+int substituteArgs(char * template, char * args, char * dest, int length, BYTE flags);
 
-char *	substituteArguments(char * source, char * args, bool omitRest);
+char *	substituteArguments(char * source, char * args, BYTE flags);
 
 #endif MOS_SYSVARS_H

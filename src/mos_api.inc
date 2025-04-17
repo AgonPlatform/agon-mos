@@ -112,6 +112,10 @@ mos_getabsolutepath:	EQU	3Ch
 mos_clearvdpflags:	EQU	40h
 mos_waitforvdpflags:	EQU	41h
 
+; Function and module APIs
+;
+mos_getfunction:	EQU	50h
+
 ; Low-level SD card functions
 ;
 sd_getunlockcode:	EQU	70h
