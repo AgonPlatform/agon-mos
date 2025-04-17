@@ -140,7 +140,10 @@ __init:			ld a, %FF
 ;
 			ld a, __FLASH_ADDR_U_INIT_PARAM
 			out0 (FLASH_ADDR_U), a
-			ld a, __FLASH_CTL_INIT_PARAM
+			; Change the flash control register to zero wait states
+			; NB using a constant here as I couldn't work out how __FLASH_CTL_INIT_PARAM is set
+			; ld a, __FLASH_CTL_INIT_PARAM
+			ld a, 08h
 			out0 (FLASH_CTRL), a
 
 			ld a, __RAM_ADDR_U_INIT_PARAM
