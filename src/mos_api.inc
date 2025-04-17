@@ -78,6 +78,7 @@ mos_i2c_close:		EQU	20h
 mos_i2c_write:		EQU	21h
 mos_i2c_read:		EQU	22h
 mos_unpackrtc:		EQU	23h
+mos_flseek_p:		EQU	24h
 
 ; MOS string functions
 ;
@@ -160,6 +161,11 @@ ffs_getfree:		EQU	A2h
 ffs_getlabel:		EQU	A3h
 ffs_setlabel:		EQU	A4h
 ffs_setcp:		EQU	A5h
+
+; Additional fatfs calls
+;
+ffs_flseek_p:		EQU	A6h
+
 	
 ; File access modes
 ;

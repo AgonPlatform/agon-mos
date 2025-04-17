@@ -65,6 +65,7 @@
 			XREF	_mos_FREAD
 			XREF	_mos_FWRITE
 			XREF	_mos_FLSEEK
+			XREF	_mos_FLSEEKP
 			XREF	_mos_I2C_OPEN
 			XREF	_mos_I2C_CLOSE
 			XREF	_mos_I2C_WRITE
@@ -75,6 +76,7 @@
 			XREF	_fat_EOF
 			XREF	_fat_size
 			XREF	_fat_error
+			XREF	_fat_lseek
 			XREF	_fat_getfree
 			XREF	_wait_VDP
 
@@ -184,8 +186,8 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_i2c_write	; 0x21
 			DW	mos_api_i2c_read	; 0x22
 			DW	mos_api_unpackrtc	; 0x23
+			DW	mos_api_flseek_p	; 0x24
 
-			DW	mos_api_not_implemented	; 0x24
 			DW	mos_api_not_implemented	; 0x25
 			DW	mos_api_not_implemented	; 0x26
 			DW	mos_api_not_implemented	; 0x27
@@ -329,6 +331,7 @@ mos_api_block2_start:	DW	ffs_api_fopen		; 0x80
 			DW	ffs_api_getlabel	; 0xA3
 			DW	ffs_api_setlabel	; 0xA4
 			DW	ffs_api_setcp		; 0xA5
+			DW	ffs_api_flseek_p	; 0xA6
 
 mos_api_block2_size:	EQU 	($ - mos_api_block2_start) / 2
 
@@ -953,7 +956,6 @@ mos_api_uopen:		LEA	HL, IX + 0	; HLU: Pointer to struct
 			CALL	NZ, SET_AHL24 	; Convert to a 24-bit absolute pointer
 			PUSH	HL		; UART * pUART
 			CALL	_open_UART1	; Initialise the UART port
-			LD	A, L 		; The return value is in HLU
 			POP	HL 		; Tidy up the stack
 			RET
 
@@ -1038,13 +1040,26 @@ mos_api_fwrite:		LD	A, MB		; Check if MBASE is 0
 ;   A: FRESULT
 ;
 mos_api_flseek:		PUSH 	DE		; UINT32 offset (msb)
-			PUSH	HL 		; UINT32 offset (lsb)
+			PUSH	HL		; UINT32 offset (lsb)
 			PUSH	BC		; UINT8 fh
-			CALL	_mos_FLSEEK
-			LD	A, L 		; FRESULT
+			CALL	_mos_FLSEEK	; Returns 8-bit FRESULT in A
 			POP	BC
 			POP	HL
 			POP	DE
+			RET
+
+; Move the read/write pointer in a file, using pointer to offset value
+;   C: Filehandle
+; HLU: Pointer to the offset value from the start of the file (DWORD)
+; Returns:
+;   A: FRESULT
+;
+mos_api_flseek_p:	CALL	FIX_HLU24	; Fix the HLU to ensure it's a 24-bit pointer
+			PUSH	HL		; DWORD * offset
+			PUSH	BC		; UINT8 fh
+			CALL	_mos_FLSEEKP
+			POP	BC
+			POP	HL
 			RET
 
 
@@ -1148,7 +1163,7 @@ $$:			PUSH	BC		; BYTE flags
 ; - HLU: Number extracted
 ; - DEU: Address of next character after end of number
 ;
-; bool	extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags)
+; uint8_t	extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags)
 mos_api_extractnumber:
 			PUSH	BC		; BYTE flags
 			LD	A, MB		; Check if MBASE is 0
@@ -1168,8 +1183,7 @@ $$:			PUSH	HL
 			LD	HL, _scratchpad + 3
 			EX	(SP), HL	; char ** end
 			PUSH	HL		; char * source
-			CALL	_extractNumber	; Call the C function extractNumber
-			LD	A, L		; Save return value in HLU, in A
+			CALL	_extractNumber	; Call the C function extractNumber. A will be true/false (1 or 0)
 			POP	HL
 			POP	HL
 			POP	HL
@@ -1563,7 +1577,6 @@ mos_api_isdirectory:
 			CALL	SET_AHL24	; HL is required, so set it
 $$:			PUSH	HL		; char * filepath
 			CALL	_isDirectory	; Call the C function isDirectory
-			LD	A, L		; Return value in HLU, put in A
 			POP	HL
 			; return value is true/false, so we need to change to 0 for success, and 19 (invalid parameter) for failure
 			OR	A, A		; Was status value false?
@@ -1819,21 +1832,23 @@ $$:			PUSH	HL		; FIL * fp
 ffs_api_fprintf:	; Available, but hard to expose as an API
 			JP mos_api_not_implemented
 
-; Get the current read/write pointer in a file
-; NB if FIL is not valid, this may return junk
+; Get the current read/write pointer/offset in a file
+; NB if FIL is not valid, this may return junk, and DE is also not fully checked for validity
 ; HLU: Pointer to a FIL struct
+; DEU: Pointer to a 32-bit value to store the returned pointer/offset in
 ; Returns:
-;   C:DE: Current read/write pointer in the file (DWORD)
-; (clears BC before returning)
+;   A: FRESULT (FR_OK or FR_INVALID_PARAMETER)
 ;
-ffs_api_ftell:		CALL	FIX_HLU24
+ffs_api_ftell:		LD	A, MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	DE		; DWORD * offset
 			PUSH	HL		; FIL * fp
-			CALL	_fat_tell	; Returns position in E:HL
-; position returned is a DWORD (32 bits) which get returned as E:HL
-			LD	BC, 0		; Clear BC
-			LD	C, E
-			LD	DE, HL
+			CALL	_fat_tell	; FRESULT returned in A
 			POP	HL
+			POP	DE
 			RET
 
 ; Check for EOF
@@ -1848,19 +1863,22 @@ ffs_api_feof:		CALL	FIX_HLU24
 			RET
 
 ; Return size of file in bytes from the FIL struct
-; NB if FIL is not valid, this may return junk
+; NB if FIL is not valid, this may return junk, and DE is also not fully checked for validity
 ; HLU: Pointer to a FIL struct
+; DEU: Pointer to a 32-bit value to store the returned size in
 ; Returns:
-;   C:DE: Size of file in bytes (DWORD)
-; (clears BC before returning)
-ffs_api_fsize:		CALL	FIX_HLU24
+;   A: FRESULT (FR_OK or FR_INVALID_PARAMETER)
+;
+ffs_api_fsize:		LD	A, MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	DE		; DWORD * size
 			PUSH	HL		; FIL * fp
-			CALL	_fat_size	; Returns size in E:HL
-; size returned is a DWORD (32 bits) which get returned as E:HL
-			LD	BC, 0		; Clear BC
-			LD	C, E
-			LD	DE, HL
+			CALL	_fat_size	; FRESULT returned in A
 			POP	HL
+			POP	DE
 			RET
 
 ; Return `err` from the FIL struct
@@ -1868,7 +1886,7 @@ ffs_api_fsize:		CALL	FIX_HLU24
 ; Returns:
 ;   A: Error code
 ;
-ffs_api_ferror:		CALL FIX_HLU24
+ffs_api_ferror:		CALL	FIX_HLU24
 			PUSH	HL		; FIL * fp
 			CALL	_fat_error	; Returns err in A
 			POP	HL
@@ -2119,7 +2137,6 @@ $$:			PUSH	BC		; UINT32 * clusterSize
 			PUSH	DE		; UINT32 * clusters
 			PUSH	HL		; const TCHAR * path
 			CALL	_fat_getfree
-			LD	A, L		; FRESULT
 			POP	HL
 			POP	DE
 			POP	BC
@@ -2166,3 +2183,21 @@ ffs_api_setlabel:	CALL	FIX_HLU24
 
 ffs_api_setcp:		; Not supported in our FatFS configuration
 			JP mos_api_not_implemented
+
+; Move the read/write pointer in a file
+; HLU: Pointer to a FIL struct
+; DEU: Pointer to a 32-bit value for to move the file pointer/offset to
+; Returns:
+;   A: FRESULT
+;
+ffs_api_flseek_p:	LD	A, MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	FIX_HLU24_no_mb_check
+$$:			PUSH	DE		; DWORD * offset
+			PUSH	HL		; FIL * fp
+			CALL	_fat_lseek	; FRESULT returned in A
+			POP	HL
+			POP	DE
+			RET

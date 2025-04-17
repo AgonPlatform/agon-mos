@@ -681,7 +681,7 @@ void gsPop(t_mosTransInfo ** transInfo) {
 //   (will not consume divider characters)
 //   TODO work thru logic around when "end" gets updated
 //
-bool extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags) {
+uint8_t extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags) {
 	int base = 10;
 	char *endptr = NULL;
 	char *parseEnd = NULL;

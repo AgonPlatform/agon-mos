@@ -9,12 +9,12 @@
 #include "mos_sysvars.h"
 
 // Check if a path is a directory - path must be resolved
-BOOL isDirectory(char *path) {
+uint8_t isDirectory(char *path) {
 	FILINFO fil;
 	FRESULT fr;
 
 	if (path[0] == '\0' || strcmp(path, ".") == 0 || strcmp(path, "..") == 0 || strcmp(path, "/") == 0 || strcmp(path, "./") == 0 || strcmp(path, "../") == 0) {
-		return TRUE;
+		return 1;	// true
 	}
 
 	// check if destination is a directory

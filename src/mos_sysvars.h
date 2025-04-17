@@ -92,7 +92,7 @@ int		gsTrans(char * source, char * dest, int destLen, int * read, BYTE flags);
 void	gsDispose(t_mosTransInfo ** transInfo);
 void	gsPop(t_mosTransInfo ** transInfo);
 
-bool	extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags);
+uint8_t	extractNumber(char * source, char ** end, char * divider, int * number, BYTE flags);
 
 int		extractString(char * source, char ** end, char * divider, char ** result, BYTE flags);
 
