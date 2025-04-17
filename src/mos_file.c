@@ -366,8 +366,11 @@ int resolvePath(char * argpath, char * resolvedPath, int * length, BYTE * index,
 }
 
 // resolveRelativePath resolves a relative path to an absolute path
+// NB length is a pointer to allow this function to change in the future
+// to return a length when no `resolved` pointer is provided,
+// and thus provide similar functionality to other path functions/APIs
 //
-int resolveRelativePath(char * path, char * resolved, int length) {
+int resolveRelativePath(char * path, char * resolved, int * length) {
 	int result;
 	char * leafname;
 	char leafChar;
@@ -380,7 +383,7 @@ int resolveRelativePath(char * path, char * resolved, int length) {
 	leafChar = *leafname;
 	if (leafname == path) {
 		// only have a leafname, so just return cwd + leafname
-		if (length >= strlen(path) + strlen(cwd) + 1) {
+		if (*length >= strlen(path) + strlen(cwd) + 1) {
 			if (leafChar == '\0') {
 				sprintf(resolved, "%s", cwd);
 			} else {
@@ -395,12 +398,12 @@ int resolveRelativePath(char * path, char * resolved, int length) {
 
 	result = f_chdir(path);
 	if (result == FR_OK) {
-		result = f_getcwd(resolved, length);
+		result = f_getcwd(resolved, *length);
 	}
 	// append our leafname to resolved
 	*leafname = leafChar;
 	if (result == FR_OK) {
-		if (strlen(resolved) + strlen(leafname) + 1 > length) {
+		if (strlen(resolved) + strlen(leafname) + 1 > *length) {
 			return MOS_OUT_OF_MEMORY;
 		}
 		if (leafChar != '\0') {

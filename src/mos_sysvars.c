@@ -1112,7 +1112,7 @@ char * getArgument(char * source, int argNo, char ** end) {
 // Returns:
 // - The length of the substituted string
 //
-int substituteArgs(char * template, char * args, char * dest, int length, bool omitRest) {
+int substituteArgs(char * template, char * args, char * dest, int length, BYTE flags) {
 	char * end = template + strlen(template);
 	char * argument;
 	int argNo;
@@ -1121,6 +1121,7 @@ int substituteArgs(char * template, char * args, char * dest, int length, bool o
 	int size = 0;
 	int destRemaining = length;
 	bool copying = (dest != NULL);
+	bool omitRest = (flags & 1);
 
 	while (template < end) {
 		if (*template == '%') {
@@ -1210,9 +1211,9 @@ int substituteArgs(char * template, char * args, char * dest, int length, bool o
 
 // wrapper call for substituteArgs to return a newly allocated string
 //
-char * substituteArguments(char * source, char * args, bool omitRest) {
+char * substituteArguments(char * source, char * args, BYTE flags) {
 	char * dest;
-	int size = substituteArgs(source, args, NULL, 0, omitRest);
+	int size = substituteArgs(source, args, NULL, 0, flags);
 	if (size == 0) {
 		return NULL;
 	}
@@ -1220,7 +1221,7 @@ char * substituteArguments(char * source, char * args, bool omitRest) {
 	if (dest == NULL) {
 		return NULL;
 	}
-	substituteArgs(source, args, dest, size, omitRest);
+	substituteArgs(source, args, dest, size, flags);
 	dest[size + 1] = '\0';		// is this needed??
 	return dest;
 }

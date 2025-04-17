@@ -1430,7 +1430,7 @@ $$:			PUSH 	HL
 ; Returns:
 ; - BCU: Calculated length of destination string
 ;
-; int substituteArgs(char * template, char * args, char * dest, int length, bool omitRest)
+; int substituteArgs(char * template, char * args, char * dest, int length, BYTE flags)
 mos_api_substituteargs:
 			PUSH	BC		; BYTE flags (bool omitRest)
 			PUSH	DE		; UINT24 length
@@ -1602,7 +1602,7 @@ $$:			LD	A, 5		; Return 5 FR_NO_PATH
 ; Returns:
 ; - A: Status code
 ;
-; int resolveRelativePath(char * path, char * resolved, int length);
+; int resolveRelativePath(char * path, char * resolved, int * length);
 ; For now, we will not support returning back length, or calculating length
 mos_api_getabsolutepath:
 			LD	A, MB		; Check if MBASE is 0
@@ -1610,7 +1610,9 @@ mos_api_getabsolutepath:
 			JR	Z, $F		; If it is, we can assume pointers are 24 bit
 			CALL	SET_AHL24
 			CALL	SET_AIX24
-$$:			PUSH	DE		; int length
+$$:			LD	(_scratchpad), DE
+			LD	DE, _scratchpad
+			PUSH	DE		; int * length
 			PUSH	IX		; char * resolved
 			PUSH	HL		; char * path
 			CALL	_resolveRelativePath	; Call the C function resolveRelativePath
@@ -1618,6 +1620,7 @@ $$:			PUSH	DE		; int length
 			POP	HL
 			POP	IX
 			POP	DE
+			LD	DE, (_scratchpad)	; Return length in DEU
 			RET
 
 ; Clear VDP flag(s)

@@ -308,7 +308,7 @@ int mos_runBinFile(char * filepath, char * args) {
 		return MOS_OUT_OF_MEMORY;
 	}
 
-	result = resolveRelativePath(resolvedPath, fullyResolvedPath, pathLen);
+	result = resolveRelativePath(resolvedPath, fullyResolvedPath, &pathLen);
 	if (result == FR_OK) {
 		if (isMoslet(fullyResolvedPath)) {
 			addr = MOS_starLoadAddress;
@@ -392,7 +392,7 @@ int mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos) {
 		return MOS_NOT_IMPLEMENTED;
 	}
 
-	expandedAlias = substituteArguments(alias, args, false);
+	expandedAlias = substituteArguments(alias, args, 0);
 	if (!expandedAlias) {
 		umm_free(alias);
 		return FR_INT_ERR;
@@ -1043,7 +1043,10 @@ int mos_cmdOBEY(char *ptr) {
 		absoluteDirectory = umm_malloc(dirLength + strlen(cwd) + 1);
 		if (directory && absoluteDirectory) {
 			fr = getDirectoryForPath(expandedPath, directory, &dirLength, 0);
-			if (fr == FR_OK) fr = resolveRelativePath(directory, absoluteDirectory, dirLength + strlen(cwd) + 1);
+			if (fr == FR_OK) {
+				int pathLen = dirLength + strlen(cwd) + 1;
+				fr = resolveRelativePath(directory, absoluteDirectory, &pathLen);
+			}
 			if (fr == FR_OK) {
 				createOrUpdateSystemVariable("Obey$Dir", MOS_VAR_STRING, absoluteDirectory);
 			}
@@ -1060,7 +1063,7 @@ int mos_cmdOBEY(char *ptr) {
 		while (!f_eof(&fil)) {
 			line++;
 			f_gets(buffer, size, &fil);
-			substituted = substituteArguments(buffer, ptr, true);
+			substituted = substituteArguments(buffer, ptr, 1);
 			if (!substituted) {
 				fr = MOS_OUT_OF_MEMORY;
 				break;
