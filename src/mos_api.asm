@@ -139,6 +139,11 @@
 			XREF	_isDirectory
 			XREF	_resolveRelativePath
 
+			XREF	_SD_getUnlockCode	; In sd.h
+			XREF	_SD_init_API
+			XREF	_SD_readBlocks_API
+			XREF	_SD_writeBlocks_API
+
 ; Call a MOS API function
 ; 00h - 7Fh: Reserved for high level MOS calls
 ; 80h - FFh: Reserved for low level calls to FatFS
@@ -269,10 +274,10 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_not_implemented	; 0x6e
 			DW	mos_api_not_implemented	; 0x6f
 
-			DW	mos_api_not_implemented	; 0x70
-			DW	mos_api_not_implemented	; 0x71
-			DW	mos_api_not_implemented	; 0x72
-			DW	mos_api_not_implemented	; 0x73
+			DW	sd_api_getunlockcode	; 0x70
+			DW	sd_api_init		; 0x71
+			DW	sd_api_readblocks	; 0x72
+			DW	sd_api_writeblocks	; 0x73
 			DW	mos_api_not_implemented	; 0x74
 			DW	mos_api_not_implemented	; 0x75
 			DW	mos_api_not_implemented	; 0x76
@@ -2200,4 +2205,69 @@ $$:			PUSH	DE		; DWORD * offset
 			CALL	_fat_lseek	; FRESULT returned in A
 			POP	HL
 			POP	DE
+			RET
+
+; Expose raw SD card access APIs
+;
+
+; Get unlock code for using SD card APIs
+; HLU: Pointer to store fetched 24-bit unlock code value
+; Returns:
+; nothing
+sd_api_getunlockcode:	CALL	FIX_HLU24
+			PUSH	HL		; int * unlockCode
+			CALL	_SD_getUnlockCode	; Call the C function SD_getUnlockCode
+			POP	HL
+			RET
+
+; Initialise SD card interface
+; HLU: Pointer to 24-bit unlock code
+; Returns:
+; - A: 0 if OK/Ready, 1 for error, 2 for locked
+sd_api_init:		CALL	FIX_HLU24	; HLU: Pointer to unlock code
+			PUSH	HL
+			CALL	_SD_init_API
+			POP	HL
+			RET
+
+; Read raw blocks from SD card
+; HLU: Pointer to DWORD for block address/offset, and unlock code at ptr+4
+; DEU: Pointer to buffer to read into
+; BC: Number of blocks to read
+; Returns:
+; - A: 0 if OK, 1 for error, 2 for locked
+; BYTE SD_readBlocks_API(DWORD * addr, BYTE *buf, WORD count)
+sd_api_readblocks:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
+$$:			PUSH	BC		; WORD count
+			PUSH	DE		; BYTE * buf
+			PUSH	HL		; DWORD * addr
+			CALL	_SD_readBlocks_API
+			POP	HL
+			POP	DE
+			POP	BC
+			RET
+
+; Write raw blocks to SD card
+; HLU: Pointer to DWORD for block address/offset, and unlock code at ptr+4
+; DEU: Pointer to buffer to write from
+; BC: Number of blocks to write
+; Returns:
+; - A: 0 if OK, 1 for error, 2 for locked
+; BYTE SD_writeBlocks_API(DWORD * addr, BYTE *buf, WORD count)
+sd_api_writeblocks:	LD	A, MB		; A: MB
+			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
+			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			CALL	SET_ADE24	; Convert DE to an address in segment A (MB)
+			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
+$$:			PUSH	BC		; WORD count
+			PUSH	DE		; BYTE * buf
+			PUSH	HL		; DWORD * addr
+			CALL	_SD_readBlocks_API
+			POP	HL
+			POP	DE
+			POP	BC
 			RET

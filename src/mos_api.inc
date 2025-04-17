@@ -112,6 +112,13 @@ mos_getabsolutepath:	EQU	3Ch
 mos_clearvdpflags:	EQU	40h
 mos_waitforvdpflags:	EQU	41h
 
+; Low-level SD card functions
+;
+sd_getunlockcode:	EQU	70h
+sd_init:		EQU	71h
+sd_readblocks:		EQU	72h
+sd_writeblocks:		EQU	73h
+
 ; FatFS file access functions
 ;
 ffs_fopen:		EQU	80h
