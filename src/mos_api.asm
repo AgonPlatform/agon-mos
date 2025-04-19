@@ -1239,7 +1239,7 @@ $$:			PUSH	HL
 			POP	HL
 			POP	DE
 			POP	BC
-			LD	BC, (HL)	; Return the length
+			LD	BC, (_scratchpad)	; Return the length
 			RET
 
 ; Set a variable value
