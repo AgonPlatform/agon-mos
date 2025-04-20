@@ -70,22 +70,3 @@ unsigned short get_timer0() {
 	unsigned char h = TMR0_DR_H;
 	return (h << 8) | l;
 }
-
-// Wait for the VDP packet to come in, with a timeout
-// Parameters:
-// - mask: Mask for the packet(s) we're expecting
-// Returns:
-// - True if the packet is received, False if there is a timeout
-//
-BOOL wait_VDP(unsigned char mask) {
-	int		i;
-	BOOL	retVal = 0;
-
-	for(i = 0; i < 250000; i++) {				// A small delay loop (~1s)
-		if(vpd_protocol_flags & mask) {			// If we get a result then
-			retVal = 1;							// Set the return value to true
-			break;								// And exit the loop
-		}
-	}
-	return retVal;
-}

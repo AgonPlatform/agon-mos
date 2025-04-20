@@ -77,7 +77,51 @@ mos_i2c_open:		EQU	1Fh
 mos_i2c_close:		EQU	20h
 mos_i2c_write:		EQU	21h
 mos_i2c_read:		EQU	22h
+mos_unpackrtc:		EQU	23h
+mos_flseek_p:		EQU	24h
 
+; MOS string functions
+;
+mos_pmatch:		EQU	28h
+mos_getargument:	EQU	29h
+mos_extractstring:	EQU	2Ah
+mos_extractnumber:	EQU	2Bh
+mos_escapestring:	EQU	2Ch
+
+; System variables and related functions
+;
+mos_setvarval:		EQU	30h
+mos_readvarval:		EQU	31h
+mos_gsinit:		EQU	32h
+mos_gsread:		EQU	33h
+mos_gstrans:		EQU	34h
+mos_substituteargs:	EQU	35h
+mos_evaluateexpression:	EQU	36h	; not implemented, yet
+; 37h not yet used
+
+; Path resolution functions
+;
+mos_resolvepath:	EQU	38h
+mos_getdirforpath:	EQU	39h
+mos_getleafname:	EQU	3Ah
+mos_isdirectory:	EQU	3Bh
+mos_getabsolutepath:	EQU	3Ch
+
+; VDP Protocol apis
+;
+mos_clearvdpflags:	EQU	40h
+mos_waitforvdpflags:	EQU	41h
+
+; Function and module APIs
+;
+mos_getfunction:	EQU	50h
+
+; Low-level SD card functions
+;
+sd_getunlockcode:	EQU	70h
+sd_init:		EQU	71h
+sd_readblocks:		EQU	72h
+sd_writeblocks:		EQU	73h
 
 ; FatFS file access functions
 ;
@@ -128,6 +172,11 @@ ffs_getfree:		EQU	A2h
 ffs_getlabel:		EQU	A3h
 ffs_setlabel:		EQU	A4h
 ffs_setcp:		EQU	A5h
+
+; Additional fatfs calls
+;
+ffs_flseek_p:		EQU	A6h
+
 	
 ; File access modes
 ;
