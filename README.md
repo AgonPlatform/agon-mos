@@ -1,16 +1,18 @@
 # agon-mos
 
-Part of the official firmware for the [Agon Console8](https://www.heber.co.uk/agon-console8)
+Part of the official Agon Platform organisation firmware for all Agon computers.
 
 This firmware is intended for use on any Agon Light compatible computer.  As well as the Agon Console8, it has been tested on the Olimex Agon Light 2.
 
-This version of agon-mos may differ from the [official Quark firmware](https://github.com/breakintoprogram/agon-mos) and contain some extensions, but software written for the official Quark firmware should be fully compatible with this version.
+The Agon Platform firmware is a fork from the original [official Quark firmware](https://github.com/breakintoprogram/agon-mos) for the Agon Light.  It contains many extensions and bug fixes.  Software written to run on Quark firmware should be fully compatible with Agon Platform releases.
 
 ### What is the Agon
 
 Agon is a modern, fully open-source, 8-bit microcomputer and microcontroller in one small, low-cost board. As a computer, it is a standalone device that requires no host PC: it puts out its own video (VGA), audio (2 identical mono channels), accepts a PS/2 keyboard and has its own mass-storage in the form of a micro-SD card.
 
 https://www.thebyteattic.com/p/agon.html
+
+There are several variants of the Agon, including the original Agon Light, the Olimex Agon Light 2, the Agon Light Origins Editions, and the [Agon Console8](https://www.heber.co.uk/agon-console8).
 
 The Agon Console8 is a fully compatible variant of the Agon Light from the same designer, with the addition of a built-in PS/2 mouse port and two Atari-style DB-9 joystick ports.
 
@@ -23,13 +25,10 @@ It also provides an API for file I/O and other common operations for BBC Basic f
 ### Loading BBC Basic for Z80
 
 1. Download bbcbasic.bin from [agon-bbc-basic releases](https://github.com/breakintoprogram/agon-bbc-basic/releases)
-2. Copy it to the root directory of the Agon SD card
+2. Copy it to the `/bin` directory of your Agon's SD card
 3. Insert the SD card into the AGON and reset/boot it
-4. Check the file is on the SD card with a `CAT` or `.` command
-5. Type the following commands into MOS:
-	- `LOAD bbcbasic.bin`
-	- `RUN`
-6. You should then be greeted with the BBC Basic for Z80 prompt
+4. Run BBC BASIC by typing `bbcbasic` at the MOS command prompt
+5. You should then be greeted with the BBC Basic for Z80 prompt
 
 ### Etiquette
 
@@ -45,7 +44,7 @@ You can download the ZDS II tools for free via the following link. The software 
 
 - [Zilog ZDS II Tools version 5.3.5](https://zilog.com/index.php?option=com_zcm&task=view&soft_id=54&Itemid=74)
 
-ZDS II is a Windows application.  Development of the MOS for the Console8 has been conducted on a MacBook Pro with an M1Max CPU running Windows 10 for ARM in a Parallels VM.  Other developers have used differing combinations of Windows, Linux and OSX, using VMs or Wine to run the ZDS II tools.
+ZDS II is a Windows application.  Development of Agon Platform MOS releases has been conducted on a MacBook Pro with an M1Max CPU running Windows 10 for ARM in a Parallels VM.  Other developers have used differing combinations of Windows, Linux and OSX, using VMs or Wine to run the ZDS II tools.
 
 #### Creating a .bin file
 
@@ -65,15 +64,13 @@ It should be noted that the emulator is not 100% accurate, so some features may 
 
 Unless you are using the ZDS II tools to program the eZ80 directly, it is recommended that you test your MOS on the emulator before testing on real hardware.
 
-#### Flashing your Agon Console8 or Agon Light
+#### Flashing your Agon Light or Agon Console8
 
-The MOS can also be flashed on your device using the [agon-flash Agon MOS firmware upgrade utility](https://github.com/envenomator/agon-flash).  This is a command line utility that runs on the Agon itself, and can flash MOS to the eZ80 from a file stored on your SD card.
+The MOS can also be flashed on your device using the [agon-flash Agon MOS firmware upgrade utility](https://github.com/AgonPlatform/agon-flash).  This is a command line utility that runs on the Agon itself, and can flash MOS to the eZ80 from a file stored on your SD card.
 
-In the event that you flash a MOS that does not work, you will need to revert your Agon back to a known working version.  With the exception of the Agon Console8, this can be done using the [agon-vdpflash utility](https://github.com/envenomator/agon-vdpflash).  
+In case of emergency, such as flashing an experimental build of MOS you have built that does not work, there is an [Agon recovery utility](https://github.com/AgonPlatform/agon-recovery) that can be used to revert the Agon back to a known working version of the MOS.
 
-Recovery for an Agon Console8 requires the use of a second external ESP32-based machine.  Guidance on this, and a tool for recovery, can be found in the [Agon Console8 Recovery Tool](https://github.com/envenomator/console8-recover) repository.
-
-It is recommended when using the agon-flash utility that you use a filename other than `MOS.bin` for your new experimental MOS version, and keep a known working version of the `MOS.bin` file in the root of your SD card, as this is the file that the agon-vdpflash utility uses.
+It is recommended when using the agon-flash utility that you use a filename other than `MOS.bin` for your new experimental MOS version, and keep a known working version of the `MOS.bin` file in the root of your SD card.
 
 #### Programming the eZ80 directly
 
@@ -93,7 +90,7 @@ Other options for programming the Agon are available, and the community will be 
 
 ### Documentation
 
-The Agon Platform documentation can now be found on the [Community Documentation](https://agonconsole8.github.io/agon-docs/) site.  This site provides extensive documentation about the Agon platform firmware, covering both Quark and Console8 firmware releases.
+The Agon Platform documentation can be found on the [Community Documentation](https://agonplatform.github.io/agon-docs/) site.  This site provides extensive documentation about the Agon Platform firmware, covering both Quark and Console8 firmware releases.
 
 ### Community
 
