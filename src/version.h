@@ -7,7 +7,7 @@
 #define		VERSION_CANDIDATE	3			// Optional
 #define		VERSION_TYPE		"Beta "     // RC, Alpha, Beta, etc.
 
-#define		VERSION_VARIANT		"Console8"
+#define		VERSION_VARIANT		"Platform"
 // #define     VERSION_SUBTITLE    ""
 
 #endif // VERSION_H
