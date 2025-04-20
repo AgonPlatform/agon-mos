@@ -3,7 +3,7 @@
  * Author:			Dean Belfield
  * Created:			10/07/2022
  * Last Updated:	11/11/2023
- * 
+ *
  * Modinfo:
  * 11/07/2022:		Removed mos_cmdBYE, Added mos_cmdLOAD
  * 12/07/2022:		Added mos_cmdJMP
@@ -203,10 +203,13 @@ UINT8	wait_VDP(UINT8 mask);
 #define HELP_HELP_ARGS		"[ <command> | all ]"
 
 #define HELP_HOTKEY			"Store a command in one of 12 hotkey slots assigned to F1-F12\r\n\r\n" \
-							"Optionally, the command string can include \"%s\" as a marker\r\n" \
-							"in which case the hotkey command will be built either side.\r\n\r\n" \
+							"Hotkey command strings can optionally include placeholder markers to indicate\r\n" \
+							"how the command should be built from the current command line.\r\n" \
+							"A placeholder of \"%s\" will insert the whole of the current line,\r\n" \
+							"or a numeric placeholder of the form \"%n\" will insert the argument at position n,\r\n" \
+							"and a placeholder of the form \"%*n\" will insert all arguments from n to the end.\r\n" \
 							"Using the Hotkey command without any arguments will list the\r\n" \
-							"currently assigned command strings.\r\n"							
+							"currently assigned command strings.\r\n"
 #define HELP_HOTKEY_ARGS	"<key number> <command string>"
 
 #define HELP_IF				"Conditionally executes another command depending on the value of an expression\r\n"
@@ -219,7 +222,7 @@ UINT8	wait_VDP(UINT8 mask);
 #define HELP_JMP_ARGS		"<addr>"
 
 #define HELP_LOAD			"Load a file from the SD card to the specified address.\r\n" \
-							"If no `addr` parameter is passed it will" \
+							"If no `addr` parameter is passed it will " \
 							"default to &40000\r\n"
 #define HELP_LOAD_ARGS		"<filename> [<addr>]"
 
