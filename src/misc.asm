@@ -18,9 +18,6 @@
 
 			.ASSUME	ADL = 1
 
-			DEFINE .STARTUP, SPACE = ROM
-			SEGMENT .STARTUP
-							
 			XDEF	SWITCH_A
 			XDEF	SET_AHL24
 			XDEF	GET_AHL24
@@ -36,7 +33,7 @@
 			XDEF	_timer0_delay
 
 			XREF	_callSM
-			
+
 ; Switch on A - lookup table immediately after call
 ;  A: Index into lookup table
 ;
@@ -104,7 +101,7 @@ _exec24:		PUSH 	IY
 ; Write out a short subroutine "JP (DE)" to RAM
 ;			
 			LD	IX, _callSM	; Storage for the self modified routine
-			LD	(IX + 0), C3h	; JP llhhuu
+			LD	(IX + 0), 0xC3	; JP llhhuu
 			LD	(IX + 1), E
 			LD	(IX + 2), D
 			LD	(IX + 3), A	
@@ -138,11 +135,11 @@ _exec16:		PUSH 	IY
 ;
 
 			LD	IX, _callSM	; Storage for the self modified routine
-			LD	(IX + 0), 49h	; CALL.IS llhh
-			LD	(IX + 1), CDh
+			LD	(IX + 0), 0x49	; CALL.IS llhh
+			LD	(IX + 1), 0xCD
 			LD	(IX + 2), E
 			LD	(IX + 3), D
-			LD	(IX + 4), C9h	; RET		
+			LD	(IX + 4), 0xC9	; RET		
 ;
 _execSM:		CALL	_callSM		; Call the subroutine
 ;
@@ -163,10 +160,10 @@ _wait_timer0:		PUSH	AF
 			IN0	A, (TMR0_CTL)	; Enable the timer
 			OR	3
 			OUT0	(TMR0_CTL), A
-$$:			IN0	B, (TMR0_DR_L)	; Fetch the counter L
+1:			IN0	B, (TMR0_DR_L)	; Fetch the counter L
 			IN0 	A, (TMR0_DR_H)	; And the counter H
 			OR	B 
-			JR	NZ, $B
+			JR	NZ, 1b
 			POP	BC 
 			POP	AF 
 			RET
@@ -180,4 +177,3 @@ _timer0_delay:
 			TIMER_WAIT	0
 			JP		(HL)
 
-END

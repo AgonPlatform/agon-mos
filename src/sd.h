@@ -21,4 +21,4 @@ BYTE	SD_writeBlocks(DWORD addr, BYTE *buf, WORD count);
 
 BYTE	SD_init();
 
-#endif SD_H
+#endif /* SD_H */

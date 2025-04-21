@@ -29,12 +29,11 @@
  * 11/11/2023:				RC3	+ See Github for full list of changes
  */
 
-#include <eZ80.h>
-#include <defines.h>
+#include "ez80f92.h"
+#include "defines.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <CTYPE.h>
-#include <String.h>
+#include <string.h>
 
 #include "defines.h"
 #include "version.h"
@@ -49,7 +48,7 @@
 #include "i2c.h"
 #include "umm_malloc.h"
 
-extern BYTE scrcolours, scrpixelIndex;  // In globals.asm
+extern volatile BYTE scrcolours, scrpixelIndex;  // In globals.asm
 
 extern void *	set_vector(unsigned int vector, void(*handler)(void));
 
@@ -57,12 +56,9 @@ extern void 	vblank_handler(void);
 extern void 	uart0_handler(void);
 extern void 	i2c_handler(void);
 
-extern char 			coldBoot;		// 1 = cold boot, 0 = warm boot
+extern char hardReset;		// 1 = hard cpu reset, 0 = soft reset
 extern volatile	char 	keycode;		// Keycode 
 extern volatile char	gp;				// General poll variable
-
-extern volatile BYTE history_no;
-extern volatile BYTE history_size;
 
 extern BOOL	vdpSupportsTextPalette;
 
@@ -73,17 +69,18 @@ extern BOOL	vdpSupportsTextPalette;
 // Returns:
 // - 1 if the function succeeded, otherwise 0
 //
-int wait_ESP32(UART * pUART, UINT24 baudRate) {	
+int wait_ESP32(UINT24 baudRate) {	
+	UART 	UART0;
 	int	i, t;
 
-	pUART->baudRate = baudRate;			// Initialise the UART object
-	pUART->dataBits = 8;
-	pUART->stopBits = 1;
-	pUART->parity = PAR_NOPARITY;
-	pUART->flowControl = FCTL_HW;
-	pUART->interrupts = UART_IER_RECEIVEINT;
+	UART0.baudRate = baudRate;			// Initialise the UART object
+	UART0.dataBits = 8;
+	UART0.stopBits = 1;
+	UART0.parity = PAR_NOPARITY;
+	UART0.flowControl = FCTL_HW;
+	UART0.interrupts = UART_IER_RECEIVEINT;
 
-	open_UART0(pUART);					// Open the UART 
+	open_UART0(&UART0);					// Open the UART 
 	init_timer0(10, 16, 0x00);  		// 10ms timer for delay
 	gp = 0;								// Reset the general poll byte	
 	for(t = 0; t < 200; t++) {			// A timeout loop (200 x 50ms = 10s)
@@ -102,16 +99,16 @@ int wait_ESP32(UART * pUART, UINT24 baudRate) {
 
 // Initialise the interrupts
 //
-void init_interrupts(void) {
+static void init_interrupts(void) {
 	set_vector(PORTB1_IVECT, vblank_handler); 	// 0x32
 	set_vector(UART0_IVECT, uart0_handler);		// 0x18
 	set_vector(I2C_IVECT, i2c_handler);			// 0x1C
 }
 
-int quickrand(void) {
-	asm("ld a,r\n"
-		"ld hl,0\n"
-		"ld l,a\n");
+static uint8_t quickrand(void) {
+	uint8_t out;
+	asm volatile("ld a,r\n":"=%a"(out));
+	return out;
 }
 
 void rainbow_msg(char* msg) {
@@ -123,10 +120,13 @@ void rainbow_msg(char* msg) {
 	if (i == 0)
 		i++;
 	for (; *msg; msg++) {
-		printf("%c%c%c", 17, i, *msg);
+		putch(17);
+		putch(i);
+		putch(*msg);
 		i = (i + 1 < scrcolours) ? i + 1 : 1;
 	}
-	printf("%c%c", 17, 15);
+	putch(17);
+	putch(15);
 }
 
 void bootmsg(void) {
@@ -147,39 +147,31 @@ void bootmsg(void) {
 	#endif
 
 	printf("\n\r\n\r");
-	#if	DEBUG > 0
-	printf("@Baud Rate: %d\n\r\n\r", pUART0.baudRate);
-	#endif
 }
 
-
-//extern UINT24 bottom;
-extern void _heapbot[];
 
 // The main loop
 //
 int main(void) {
-	UART 	pUART0;
-	//void *  empty = NULL;
-
-	DI();											// Ensure interrupts are disabled before we do anything
+	asm volatile("di");
 	init_interrupts();								// Initialise the interrupt vectors
 	init_rtc();										// Initialise the real time clock
 	init_spi();										// Initialise SPI comms for the SD card interface
 	init_UART0();									// Initialise UART0 for the ESP32 interface
 	init_UART1();									// Initialise UART1
-	EI();											// Enable the interrupts now
+	asm volatile("ei");
 	
-	if(!wait_ESP32(&pUART0, 1152000)) {				// Try to lock onto the ESP32 at maximum rate
-		if(!wait_ESP32(&pUART0, 384000))	{		// If that fails, then fallback to the lower baud rate
+	if(!wait_ESP32(1152000)) {				// Try to lock onto the ESP32 at maximum rate
+		if(!wait_ESP32(384000))	{		// If that fails, then fallback to the lower baud rate
 			gp = 2;									// Flag GP as 2, just in case we need to handle this error later
 		}
 	}	
-	if(coldBoot == 0) {								// If a warm boot detected then
-		putch(12);									// Clear the screen
+	if(hardReset == 0) {
+		// clear screen on soft reset, since VDP has not been reset
+		putch(12);
 	}
 
-	umm_init_heap((void*)_heapbot, HEAP_LEN);
+	umm_init_heap((void*)__heapbot, HEAP_LEN);
 
 	scrcolours = 0;
 	scrpixelIndex = 255;
@@ -208,7 +200,7 @@ int main(void) {
 	//
 	#if enable_config == 1
 	{
-		int err = mos_EXEC("autoexec.txt", &cmd, sizeof cmd);	// Then load and run the config file
+		int err = mos_EXEC("autoexec.txt", cmd, sizeof cmd);	// Then load and run the config file
 		if (err > 0 && err != FR_NO_FILE) {
 			mos_error(err);
 		}
@@ -218,8 +210,8 @@ int main(void) {
 	// The main loop
 	//
 	while(1) {
-		if(mos_input(&cmd, sizeof(cmd)) == 13) {
-			int err = mos_exec(&cmd, TRUE);
+		if(mos_input(cmd, sizeof(cmd)) == 13) {
+			int err = mos_exec(cmd, TRUE);
 			if(err > 0) {
 				mos_error(err);
 			}

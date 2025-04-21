@@ -12,6 +12,8 @@
 #ifndef SPI_H
 #define SPI_H
 
+#include "defines.h"
+
 void init_spi();
 
 BYTE spi_transfer(BYTE d);
@@ -19,4 +21,4 @@ BYTE spi_read_one(void);
 void spi_read(char *buf, unsigned int len);
 void spi_write(char *buf, unsigned int len);
 
-#endif SPI_H
+#endif /* SPI_H */

@@ -11,7 +11,6 @@
  * 26/09/2023:		Timestamps now packed into 6 bytes
  */
 
-#include <ez80.h>
 #include <defines.h>
 #include <stdio.h>
 #include <stdlib.h>

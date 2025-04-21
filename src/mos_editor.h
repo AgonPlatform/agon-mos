@@ -27,4 +27,4 @@ BOOL editHistorySet(char *buffer, int insertPos, int len, int limit, int index);
 
 extern char	*hotkey_strings[12];
 
-#endif MOS_EDITOR_H
+#endif /* MOS_EDITOR_H */

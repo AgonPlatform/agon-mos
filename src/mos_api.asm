@@ -28,8 +28,7 @@
 
 			.ASSUME	ADL = 1
 			
-			DEFINE .STARTUP, SPACE = ROM
-			SEGMENT .STARTUP
+			.text
 			
 			XDEF	mos_api	
 
@@ -101,7 +100,7 @@
 ;  A: function to call
 ;
 mos_api:		CP	80h			; Check if it is a FatFS command
-			JR	NC, $F			; Yes, so jump to next block
+			JP	NC, 1f			; Yes, so jump to next block
 			CP	mos_api_block1_size	; Check if out of bounds
 			JP	NC, mos_api_not_implemented
 			CALL	SWITCH_A		; Switch on this table
@@ -243,7 +242,7 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 
 mos_api_block1_size:	EQU 	($ - mos_api_block1_start) / 2
 ;			
-$$:			AND	7Fh			; Else remove the top bit
+1:			AND	7Fh			; Else remove the top bit
 			CP	mos_api_block2_size	; Check if out of bounds
 			JP	NC, mos_api_not_implemented
 			CALL	SWITCH_A		; And switch on this table
@@ -301,8 +300,8 @@ mos_api_not_implemented:
 mos_api_getkey:		PUSH	HL
 			LD	HL, _keycount	
 mos_api_getkey_1:	LD	A, (HL)			; Wait for a key to be pressed
-$$:			CP	(HL)
-			JR	Z, $B
+1:			CP	(HL)
+			JR	Z, 1b 
 			LD	A, (_keydown)		; Check if key is down
 			OR	A 
 			JR	Z, mos_api_getkey_1	; No, so loop
@@ -320,7 +319,7 @@ $$:			CP	(HL)
 ;
 mos_api_load:		LD	A, MB		; Check if MBASE is 0
 			OR	A, A
-			JR	Z, $F		; If it is, we can assume HL and DE are 24 bit
+			JR	Z, 1f		; If it is, we can assume HL and DE are 24 bit
 ;
 ; Now we need to mod HLU and DEU to include the MBASE in the U byte
 ;
@@ -329,7 +328,7 @@ mos_api_load:		LD	A, MB		; Check if MBASE is 0
 ;
 ; Finally, we can do the load
 ;
-$$:			PUSH	BC		; UINT24   size
+1:			PUSH	BC		; UINT24   size
 			PUSH	DE		; UNIT24   address
 			PUSH	HL		; char   * filename
 			CALL	_mos_LOAD	; Call the C function mos_LOAD
@@ -350,7 +349,7 @@ $$:			PUSH	BC		; UINT24   size
 ;
 mos_api_save:		LD	A, MB		; Check if MBASE is 0
 			OR	A, A
-			JR	Z, $F		; If it is, we can assume HL and DE are 24 bit
+			JR	Z, 1f		; If it is, we can assume HL and DE are 24 bit
 ;
 ; Now we need to mod HLU and DEU to include the MBASE in the U byte
 ;
@@ -359,7 +358,7 @@ mos_api_save:		LD	A, MB		; Check if MBASE is 0
 ;
 ; Finally, we can do the save
 ;
-$$:			PUSH	BC		; UINT24   size
+1:			PUSH	BC		; UINT24   size
 			PUSH	DE		; UNIT24   address
 			PUSH	HL		; char   * filename
 			CALL	_mos_SAVE	; Call the C function mos_LOAD
@@ -438,7 +437,7 @@ mos_api_del:		LD	A, MB		; Check if MBASE is 0
 ;
 mos_api_ren:		LD	A, MB		; Check if MBASE is 0
 			OR	A, A
-			JR	Z, $F		; If it is, we can assume HL and DE are 24 bit
+			JR	Z, 1f		; If it is, we can assume HL and DE are 24 bit
 ;
 ; Now we need to mod HLU and DEu to include the MBASE in the U byte
 ; 
@@ -447,7 +446,7 @@ mos_api_ren:		LD	A, MB		; Check if MBASE is 0
 ;
 ; Finally we can do the rename
 ; 
-$$:			PUSH	DE		; char * filename2
+1:			PUSH	DE		; char * filename2
 			PUSH	HL		; char * filename1
 			CALL	_mos_REN_API	; Call the C function mos_REN_API
 			LD	A, L		; Return vaue in HLU, put in A
@@ -463,7 +462,7 @@ $$:			PUSH	DE		; char * filename2
 ;
 mos_api_copy:		LD	A, MB		; Check if MBASE is 0
 			OR	A, A
-			JR	Z, $F		; If it is, we can assume HL and DE are 24 bit
+			JR	Z, 1f		; If it is, we can assume HL and DE are 24 bit
 ;
 ; Now we need to mod HLU and DEu to include the MBASE in the U byte
 ; 
@@ -472,7 +471,7 @@ mos_api_copy:		LD	A, MB		; Check if MBASE is 0
 ;
 ; Finally we can do the rename
 ; 
-$$:			PUSH	DE		; char * filename2
+1:			PUSH	DE		; char * filename2
 			PUSH	HL		; char * filename1
 			CALL	_mos_COPY_API	; Call the C function mos_COPY_API
 			LD	A, L		; Return vaue in HLU, put in A
@@ -765,10 +764,10 @@ mos_api_setintvector:	LD	A, E
 mos_api_setkbvector:	PUSH	DE
 			XOR	A
 			OR	C		; If C!=0 set top byte (bits 16:23) to MB
-			JR	Z, $F
+			JR	Z, 1f
 			LD	A, MB
 			CALL	SET_AHL24
-$$:			PUSH	HL
+1:			PUSH	HL
 			POP	DE
 			LD	HL, _user_kbvector
 			LD	(HL),DE		
@@ -910,7 +909,7 @@ mos_api_uclose:		JP	_close_UART1
 ;   F: C if successful
 ;   F: NC if the UART is not open
 ;
-mos_api_ugetc		JP	UART1_serial_GETCH
+mos_api_ugetc:		JP	UART1_serial_GETCH
 
 ; Write a character to UART1
 ;   C: Character to write
@@ -999,14 +998,14 @@ mos_api_flseek:		PUSH 	DE		; UINT32 offset (msb)
 ;
 ffs_api_fopen:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
 			CALL	GET_AHL24	; Get MSB of HL
 			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
 			LD	A, MB		; A: MB
 			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
 ;
-$$:			PUSH	BC		; BYTE mode
+1:			PUSH	BC		; BYTE mode
 			PUSH	DE		; const TCHAR * path
 			PUSH	HL		; FIL * fp
 			CALL	_f_open 
@@ -1023,13 +1022,13 @@ $$:			PUSH	BC		; BYTE mode
 ;
 ffs_api_fclose:		LD	A, MB
 			OR	A, A 
-			JR	Z, $F
+			JR	Z, 1f
 			CALL	GET_AHL24
 			OR 	A, A 
 			LD	A, MB
 			CALL	Z, SET_AHL24
 ;
-$$:			PUSH	HL		; FIL * fp
+1:			PUSH	HL		; FIL * fp
 			CALL	_f_close 
 			LD	A, L		; FRESULT
 			POP	HL 
@@ -1045,14 +1044,14 @@ $$:			PUSH	HL		; FIL * fp
 ;
 ffs_api_fread:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
 			CALL	GET_AHL24	; Get MSB of HL
 			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
 			LD	A, MB		; A: MB
 			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
 ;
-$$:			PUSH	HL
+1:			PUSH	HL
 			LD	HL, _scratchpad
 			EX	(SP), HL	; UINT * br
 			PUSH	BC		; UINT btr
@@ -1077,14 +1076,14 @@ $$:			PUSH	HL
 ;
 ffs_api_fwrite:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
 			CALL	GET_AHL24	; Get MSB of HL
 			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
 			LD	A, MB		; A: MB
 			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
 ;
-$$:			PUSH	HL
+1:			PUSH	HL
 			LD	HL, _scratchpad
 			EX	(SP), HL	; UINT * bw
 			PUSH	BC		; UINT btw
@@ -1107,14 +1106,14 @@ $$:			PUSH	HL
 ;
 ffs_api_stat:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
 			CALL	GET_AHL24	; Get MSB of HL
 			OR	A, A 		; Does it already contain a value? (fetched using mos_api_getfil?)
 			LD	A, MB		; A: MB
 			CALL	Z, SET_AHL24	; No it's zero, so convert HL to an address in segment A (MB)
 ;
-$$:			PUSH	HL		; FILEINFO * fil
+1:			PUSH	HL		; FILEINFO * fil
 			PUSH	DE		; const TCHAR * path
 			CALL	_f_stat 
 			LD	A, L 		; FRESULT
@@ -1129,13 +1128,13 @@ $$:			PUSH	HL		; FILEINFO * fil
 ;
 ffs_api_feof:		LD	A, MB
 			OR	A, A 
-			JR	Z, $F
+			JR	Z, 1f
 			CALL	GET_AHL24
 			OR 	A, A 
 			LD	A, MB
 			CALL	Z, SET_AHL24
 ;
-$$:			PUSH	HL		; FILEINFO * fil
+1:			PUSH	HL		; FILEINFO * fil
 			CALL	_fat_EOF 
 			LD	A, L 		; EOF
 			POP	HL
@@ -1150,13 +1149,13 @@ $$:			PUSH	HL		; FILEINFO * fil
 ;
 ffs_api_flseek:		LD	A, MB
 			OR	A, A 
-			JR	Z, $F
+			JR	Z, 1f
 			CALL	GET_AHL24
 			OR 	A, A 
 			LD	A, MB
 			CALL	Z, SET_AHL24
 ;
-$$:			PUSH	BC 		; FSIZE_t ofs (msb)
+1:			PUSH	BC 		; FSIZE_t ofs (msb)
 			PUSH	DE		; FSIZE_t ofs (lsw)
 			PUSH	HL		; FIL * fp
 			CALL	_f_lseek 
@@ -1174,13 +1173,13 @@ $$:			PUSH	BC 		; FSIZE_t ofs (msb)
 ffs_api_ftruncate:	
 			LD	A, MB
 			OR	A, A 
-			JR	Z, $F
+			JR	Z, 1f
 			CALL	GET_AHL24
 			OR 	A, A 
 			LD	A, MB
 			CALL	Z, SET_AHL24
 ;
-$$:			PUSH	HL		; FIL * fp
+1:			PUSH	HL		; FIL * fp
 			CALL	_f_truncate 
 			LD	A, L
 			POP	HL		
@@ -1217,10 +1216,10 @@ ffs_api_ferror:
 ; A: FRESULT
 ffs_api_dopen:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
 			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
-$$:
+1:
 			PUSH	DE 		; const TCHAR *path
 			PUSH    HL		; DIR *dp
 			CALL	_f_opendir
@@ -1235,9 +1234,9 @@ $$:
 ; A: FRESULT
 ffs_api_dclose:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
-$$:
+1:
 			PUSH    HL		; DIR *dp
 			CALL	_f_closedir
 			LD	A, L		; FRESULT
@@ -1251,10 +1250,10 @@ $$:
 ; A: FRESULT
 ffs_api_dread:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL 	SET_ADE24	; Convert DE to an address in segment A (MB)
 			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
-$$:
+1:
 			PUSH	DE 		; FILINFO *fno
 			PUSH    HL		; DIR *dp
 			CALL	_f_readdir
@@ -1288,9 +1287,9 @@ ffs_api_chdrive:
 ; A: FRESULT
 ffs_api_getcwd:		LD	A, MB		; A: MB
 			OR	A, A 		; Check whether MB is 0, i.e. in 24-bit mode
-			JR	Z, $F		; It is, so skip as all addresses can be assumed to be 24-bit
+			JR	Z, 1f		; It is, so skip as all addresses can be assumed to be 24-bit
 			CALL	SET_AHL24	; Convert HL to an address in segment A (MB)
-$$:
+1:
 			PUSH	BC 		; sizeof(buffer)
 			PUSH    HL		; buffer
 			CALL	_f_getcwd
@@ -1303,7 +1302,7 @@ ffs_api_mount:
 			JP mos_api_not_implemented
 ffs_api_mkfs:		
 			JP mos_api_not_implemented
-ffs_api_fdisk		
+ffs_api_fdisk:
 			JP mos_api_not_implemented
 ffs_api_getfree:	
 			JP mos_api_not_implemented

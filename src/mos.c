@@ -37,8 +37,8 @@
  * 11/11/2023:		Added mos_cmdHELP, mos_cmdTYPE, mos_cmdCLS, mos_cmdMOUNT, mos_mount
  */
 
-#include <eZ80.h>
-#include <defines.h>
+#include "ez80f92.h"
+#include "defines.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -237,7 +237,7 @@ BOOL mos_cmp(const char *p1, const char *p2) {
 		if(c1 < 0x20) c1 = 0;
 		if(c2 < 0x20) c2 = 0;
 	} while(c1 && c2 && c1 == c2);
-	return (const unsigned char*)c1 - (const unsigned char*)c2;
+	return c1 - c2;
 }
 
 // String trim function
@@ -491,7 +491,7 @@ int mos_cmdDIR(char * ptr) {
 //
 int mos_cmdECHO(char *ptr) {
 	int c;
-	const char *p = mos_strtok_ptr;
+	char *p = mos_strtok_ptr;
 
 	while (*p) {
 		switch (*p) {
@@ -866,7 +866,7 @@ int mos_cmdDEL(char * ptr) {
 				INT24 retval;
 				// we could potentially support "All" here, and when detected changing `force` to true
 				printf("Delete %s? (Yes/No/Cancel) ", fullPath);
-				retval = mos_EDITLINE(&verify, sizeof(verify), 13);
+				retval = mos_EDITLINE(verify, sizeof(verify), 13);
 				printf("\n\r");
 				if (retval == 13) {
 					if (strcasecmp(verify, "Cancel") == 0 || strcasecmp(verify, "C") == 0) {
@@ -1154,7 +1154,7 @@ int mos_cmdTIME(char *ptr) {
 	return 0;
 }
 
-extern void sysvars[];
+extern uint8_t sysvars[];
 
 // MEM
 // Returns:
@@ -1163,12 +1163,12 @@ extern void sysvars[];
 int mos_cmdMEM(char * ptr) {
 	int try_len = HEAP_LEN;
 
-	printf("ROM      &000000-&01ffff     %2d%% used\r\n", ((int)_low_romdata) / 1311);
-	printf("USER:LO  &%06x-&%06x %6d bytes\r\n", 0x40000, (int)_low_data-1, (int)_low_data - 0x40000);
+	printf("ROM      &000000-&01ffff     %2d%% used\r\n", ((int)__rodata_end+(int)__data_len) / 1311);
+	printf("USER:LO  &%06x-&%06x %6d bytes\r\n", 0x40000, (int)__data_start-1, (int)__data_start - 0x40000);
 	// data and bss together
-	printf("MOS:DATA &%06x-&%06x %6d bytes\r\n", _low_data, (int)_heapbot - 1, (int)_heapbot - (int)_low_data);
-	printf("MOS:HEAP &%06x-&%06x %6d bytes\r\n", _heapbot, (int)_stack - SPL_STACK_SIZE - 1, HEAP_LEN);
-	printf("STACK24  &%06x-&%06x %6d bytes\r\n", (int)_stack - SPL_STACK_SIZE, _stack-1, SPL_STACK_SIZE);
+	printf("MOS:DATA &%06x-&%06x %6d bytes\r\n", (int)__data_start, (int)__heapbot-1, (int)__heapbot - (int)__data_start);
+	printf("MOS:HEAP &%06x-&%06x %6d bytes\r\n", (int)__heapbot, (int)_stack - SPL_STACK_SIZE - 1, HEAP_LEN);
+	printf("STACK24  &%06x-&%06x %6d bytes\r\n", 0xc0000 - SPL_STACK_SIZE, 0xbffff, SPL_STACK_SIZE);
 	printf("USER:HI  &b7e000-&b7ffff   8192 bytes\r\n");
 	printf("\r\n");
 
@@ -1182,7 +1182,7 @@ int mos_cmdMEM(char * ptr) {
 	}
 
 	printf("Largest free MOS:HEAP fragment: %d bytes\r\n", try_len);
-	printf("Sysvars at &%06x\r\n", sysvars);
+	printf("Sysvars at &%06x\r\n", (uint24_t)sysvars);
 	printf("\r\n");
 
 	return 0;
@@ -1732,7 +1732,7 @@ UINT24 mos_DIR(char* inputPath, BOOL longListing) {
         int maxCols = scrcols / longestFilename;
 
 		num_dirents = fno_num;
-		qsort(fnos, num_dirents, sizeof(SmallFilInfo), cmp_filinfo);
+		qsort(fnos, num_dirents, sizeof(SmallFilInfo), (int (*)(const void *, const void*))&cmp_filinfo);
         fno_num = 0;
 
         for (; fno_num < num_dirents; fno_num++) {
@@ -2212,7 +2212,7 @@ UINT24	mos_FREAD(UINT8 fh, UINT24 buffer, UINT24 btr) {
 	UINT	br = 0;
 
 	if(fo > 0) {
-		fr = f_read(fo, (const void *)buffer, btr, &br);
+		fr = f_read(fo, (void *)buffer, btr, &br);
 		if(fr == FR_OK) {
 			return br;
 		}
@@ -2386,7 +2386,9 @@ UINT8 fat_EOF(FIL * fp) {
 //
 int mos_mount(void) {
 	int ret = f_mount(&fs, "", 1);			// Mount the SD card
-	f_getcwd(cwd, sizeof(cwd)); //Update full path.
+	if (ret == FR_OK) {
+		f_getcwd(cwd, sizeof(cwd)); 	// update current working directory
+	}
 	return ret;
 }
 
