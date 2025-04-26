@@ -1449,6 +1449,17 @@ void printEscapedString(char * value) {
 	}
 }
 
+void autoPageOutput() {
+	t_mosSystemVariable * autoPaged = NULL;
+
+	if (getSystemVariable("CLI$AutoPaged", &autoPaged) == 0) {
+		// Variable set, so turn on temporary paged mode
+		putch(23);
+		putch(0);
+		putch(0x9A);
+	};
+}
+
 // SHOW [<pattern>] command
 // Will show all system variables if no pattern is provided
 // or only those variables that match the given pattern
@@ -1462,10 +1473,7 @@ int mos_cmdSHOW(char * ptr) {
 		token = "*";
 	}
 
-	// Turn on temporary paged mode
-	putch(23);
-	putch(0);
-	putch(0x9A);
+	autoPageOutput();
 
 	while (getSystemVariable(token, &var) == 0) {
 		printf("%s", var->label);
@@ -1758,10 +1766,7 @@ int mos_cmdHELP(char *ptr) {
 		return result;
 	}
 
-	// Turn on temporary paged mode
-	putch(23);
-	putch(0);
-	putch(0x9A);
+	autoPageOutput();
 
 	if (strcasecmp(cmd, "all") == 0) {
 		for (i = 0; i < mosCommands_count; ++i) {
@@ -1968,6 +1973,7 @@ UINT24 mos_TYPE(char * filename) {
 		fr = f_open(&fil, expandedFilename, FA_READ);
 	}
 	if (fr == FR_OK) {
+		autoPageOutput();
 		while (1) {
 			fr = f_read(&fil, (void *)buffer, size, &br);
 			if (br == 0)
@@ -2098,10 +2104,7 @@ UINT24	mos_DIRFallback(char * dirPath, char * pattern, BYTE flags) {
 	bool	hideVolumeInfo = flags & MOS_DIR_HIDE_VOLUME_INFO;
 	bool	usePattern = pattern != NULL;
 
-	// Turn on temporary paged mode
-	putch(23);
-	putch(0);
-	putch(0x9A);
+	autoPageOutput();
 
 	if (!hideVolumeInfo) {
 		fr = f_getlabel("", volume, 0);
@@ -2250,10 +2253,7 @@ UINT24 displayDirectory(char * dirPath, char * pattern, BYTE flags) {
 		qsort(filesInfo, entryCount, sizeof(SmallFilInfo), cmp_filinfo);
 		fileNum = 0;
 
-		// Turn on temporary paged mode
-		putch(23);
-		putch(0);
-		putch(0x9A);
+		autoPageOutput();
 
 		while (fileNum < entryCount) {
 			bool isDir;
