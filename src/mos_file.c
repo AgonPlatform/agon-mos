@@ -221,30 +221,45 @@ int resolvePath(char * argpath, char * resolvedPath, int * length, BYTE * index,
 	BYTE prefixIndex = index ? *index : 0;
 	bool newSearch = prefixIndex == 0;
 	bool lengthCheck = resolvedPath == NULL;
+	char * srcpath;
 	char * filepath;
-	char * leafname;
+	int len = 0;
+
+	// Input path is control character terminated, not just null terminated
+	while (argpath[len] > 31) {
+		len++;
+	}
+	srcpath = umm_malloc(len + 1);
+	if (srcpath == NULL) {
+		return MOS_OUT_OF_MEMORY;
+	}
+	sprintf(srcpath, "%.*s", len, argpath);
 
 	if (flags & RESOLVE_OMIT_EXPAND) {
-		filepath = argpath;
+		filepath = srcpath;
+		srcpath = NULL;		// we've transferred ownership of srcpath to filepath
 	} else {
-		filepath = expandMacro(argpath);
-		if (filepath == NULL) {
-			return FR_INVALID_PARAMETER;		// couldn't expand path, so report an error
-		}
+		filepath = expandMacro(srcpath);
+	}
+	if (srcpath != NULL) {
+		// free the srcpath as we're not using it beyond this point
+		umm_free(srcpath);
+		srcpath = NULL;
+	}
+	if (filepath == NULL) {
+		return FR_INVALID_PARAMETER;		// couldn't expand path, so report an error
 	}
 
-	leafname = getFilepathLeafname(filepath);
-
 	if (lengthCheck) {
-		return getLengthForResolvedPath(filepath, length, NULL, flags);
+		result = getLengthForResolvedPath(filepath, length, NULL, flags);
+		umm_free(filepath);
+		return result;
 	}
 
 	if (dir == NULL) {
 		localDir = umm_malloc(sizeof(DIR));
 		if (localDir == NULL) {
-			if (filepath != argpath) {
-				umm_free(filepath);
-			}
+			umm_free(filepath);
 			return MOS_OUT_OF_MEMORY;
 		}
 		dir = localDir;
@@ -284,15 +299,14 @@ int resolvePath(char * argpath, char * resolvedPath, int * length, BYTE * index,
 				}	
 			}
 			umm_free(localDir);
-			if (filepath != argpath) {
-				umm_free(filepath);
-			}
+			umm_free(filepath);
 			return result;
 		}
 	}
 
 	if (newSearch) {
 		char * searchPath = NULL;
+		char * leafname = getFilepathLeafname(filepath);
 		int pathLength = 0;
 		int basePathLength = 0;
 		bool found = false;
@@ -359,9 +373,7 @@ int resolvePath(char * argpath, char * resolvedPath, int * length, BYTE * index,
 	}
 
 	umm_free(localDir);
-	if (filepath != argpath) {
-		umm_free(filepath);
-	}
+	umm_free(filepath);
 	return result;
 }
 
