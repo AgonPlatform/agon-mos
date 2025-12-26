@@ -25,4 +25,4 @@ BOOL 			wait_VDP(unsigned char mask);
 void            wait_timer0();  // In misc.asm
 
 
-#endif TIMER_H
+#endif /* TIMER_H */

@@ -68,7 +68,7 @@ void 	mos_error(int error);
 BYTE	mos_getkey(void);
 UINT24	mos_input(char * buffer, int bufferLength);
 t_mosCommand	*mos_getCommand(char * ptr);
-BOOL 	mos_cmp(char *p1, char *p2);
+BOOL 	mos_cmp(const char *p1,const  char *p2);
 char *	mos_trim(char * s);
 char *	mos_strtok(char *s1, char * s2);
 char *	mos_strtok_r(char *s1, const char *s2, char **ptr);
@@ -242,4 +242,4 @@ UINT8	fat_EOF(FIL * fp);
 
 #define HELP_HELP_ARGS		"[ <command> | all ]"
 
-#endif MOS_H
+#endif /* MOS_H */

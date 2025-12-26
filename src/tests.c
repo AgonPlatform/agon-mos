@@ -32,6 +32,21 @@ static BOOL malloc_grind_validate(struct mg_item_t *item)
 	return 1;
 }
 
+static uint24_t rand_seed;
+
+static void init_rand() {
+	uint8_t out;
+	asm("ld a,r\n":"=%a"(out));
+	rand_seed = (uint24_t)out;
+}
+
+/* Linear congruential generator { seed = ((seed * mult) + incr) & 0xffff }
+   mult=137 (prime, 128+8+1), incr=1 */
+static uint24_t rand_() {
+	rand_seed = ((rand_seed * 137) + 1);
+	return rand_seed;
+}
+
 static void malloc_grind()
 {
 	int iter, num, idx;
@@ -46,10 +61,10 @@ static void malloc_grind()
 	
 
 	for (iter=0; iter<MG_ITERS; iter++) {
-		idx = rand() % MG_MAX_ITEMS;
+		idx = rand_() % MG_MAX_ITEMS;
 
 		if (items[idx].ptr == 0) {
-			num = (rand() % 64) + 1;
+			num = (rand_() % 64) + 1;
 
 			items[idx].ptr = umm_malloc(num * sizeof(struct mg_item_t));
 			items[idx].num = num;
@@ -86,6 +101,7 @@ cleanup:
 
 int mos_cmdTEST(char *ptr)
 {
+	init_rand();
 	malloc_grind();
 	return 0;
 }

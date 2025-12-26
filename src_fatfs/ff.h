@@ -53,7 +53,7 @@ typedef WORD			WCHAR;	/* UTF-16 character type */
 
 #elif defined(_EZ80)		/* The ZDS compiler is pre-C11, so can't redeclare typedefs */
 #define FF_INTDEF 1
-#include <ez80.h>
+#include "ez80f92.h"
 #include <defines.h>
 typedef WORD			WCHAR;	/* UTF-16 character type */
 
