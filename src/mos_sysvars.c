@@ -1233,6 +1233,5 @@ char * substituteArguments(char * source, char * args, BYTE flags) {
 		return NULL;
 	}
 	substituteArgs(source, args, dest, size, flags);
-	dest[size + 1] = '\0';		// is this needed??
 	return dest;
 }
