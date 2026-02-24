@@ -129,6 +129,9 @@ int updateSystemVariable(t_mosSystemVariable * var, MOSVARTYPE type, void * valu
 		}
 		var->value = newValue;
 	} else {
+		if (oldType == MOS_VAR_MACRO || oldType == MOS_VAR_STRING) {
+			umm_free(var->value);
+		}
 		var->value = value;
 	}
 	return FR_OK;
@@ -189,6 +192,7 @@ int setVarVal(char * name, void * value, char ** actualName, BYTE * type) {
 		}
 		*type = evalResult->type;
 		value = evalResult->result;
+		umm_free(evalResult);
 		if (*type == MOS_VAR_STRING) {
 			freeValue = true;
 		}
@@ -225,6 +229,9 @@ int setVarVal(char * name, void * value, char ** actualName, BYTE * type) {
 		// Variable wasn't found, so we need to create it
 		t_mosSystemVariable * newVar = createSystemVariable(name, *type, value);
 		if (newVar == NULL) {
+			if (freeValue) {
+				umm_free(value);
+			}
 			return FR_INT_ERR;
 		}
 		// `var` will be our insertion point
@@ -611,6 +618,7 @@ int gsTrans(char * source, char * dest, int destLen, int * read, BYTE flags) {
 	while (transInfo != NULL) {
 		result = gsRead(&transInfo, &c);
 		if (result != FR_OK) {
+			gsDispose(&transInfo);
 			return result;
 		}
 		if (transInfo == NULL) {
@@ -638,6 +646,9 @@ void gsDispose(t_mosTransInfo ** transInfoPtr) {
 	}
 	while (transInfo != NULL) {
 		t_mosTransInfo * next = transInfo->parent;
+		if (transInfo->type == MOS_VAR_CODE) {
+			umm_free(transInfo->extraData);
+		}
 		sprintf(transInfo->active, "DEAD");
 		umm_free(transInfo);
 		transInfo = next;
