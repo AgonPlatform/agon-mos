@@ -7,6 +7,7 @@
 
 #include "mos_file.h"
 #include "mos_sysvars.h"
+#include "utils.h"
 
 // Check if a path is a directory - path must be resolved
 uint8_t isDirectory(char *path) {
@@ -128,7 +129,7 @@ bool checkAttribute(BYTE attribute, BYTE flags) {
 	if (matchAll) {
 		// top bit set means we are looking for a complete flag/attribute match
 		// i.e. all requested attributes must be set.  extra attributes that may be set are ignored
-		return (flags & attribute == flags);
+		return ((flags & attribute) == flags);
 	}
 	// otherwise we are excluding if one of the flags is set
 	return !(flags & attribute);
@@ -492,7 +493,15 @@ int copyFile(char * source, char * dest) {
 	UINT br, bw;
 	BYTE * buffer;
 
-	buffer = umm_malloc(1024);
+	// Work out the largest sensible/efficient buffer size for copying
+	// taking the largest free size, and rounding to a multiple of 512 (the typical cluster size)
+	uint24_t bufferSize = getLargestFreeHeapFragment();
+	if (bufferSize > 512) {
+		// Round down to a multiple of 512, avoiding zeroing the size
+		bufferSize = bufferSize & 0xfffe00;
+	}
+
+	buffer = umm_malloc(bufferSize);
 	if (!buffer) {
 		return MOS_OUT_OF_MEMORY;
 	}
@@ -502,7 +511,7 @@ int copyFile(char * source, char * dest) {
 		fr = f_open(&dst, dest, FA_WRITE | FA_CREATE_NEW);
 		if (fr == FR_OK) {
 			while (1) {
-				fr = f_read(&src, buffer, sizeof(buffer), &br);
+				fr = f_read(&src, buffer, bufferSize, &br);
 				if (fr != FR_OK || br == 0) {
 					break;
 				}
