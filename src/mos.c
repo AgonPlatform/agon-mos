@@ -328,7 +328,7 @@ int mos_runBinFile(char * filepath, char * args) {
 }
 
 // runOrLoadFile needs to be called with args _including_ the filepath
-int mos_runOrLoadFile(char * ptr, bool run) {
+int mos_runOrLoadFile(char * ptr, bool run, bool * matched) {
 	char *	filepath = NULL;
 	char * 	cmdFile = NULL;
 	char *	cmdFileEnd = NULL;
@@ -336,6 +336,8 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 	char *	resolvedPath = NULL;
 	char *	extension = NULL;
 	int		result = extractString(ptr, &cmdFileEnd, NULL, &cmdFile, 0);
+
+	if (matched) *matched = false;
 
 	if (result != FR_OK) {
 		return result;
@@ -373,7 +375,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 		} else {
 			extension++;
 			sprintf(token, "Alias$@%sType_%s", run ? "Run" : "Load", extension);
-			result = mos_execAlias(token, ptr, run ? "LastFile$Run" : "LastFile$Load", true);
+			result = mos_execAlias(token, ptr, run ? "LastFile$Run" : "LastFile$Load", true, matched);
 			umm_free(token);
 			if (result == MOS_NOT_IMPLEMENTED) {
 				result = MOS_INVALID_COMMAND;
@@ -385,7 +387,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 	return result;
 }
 
-int mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos) {
+int mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos, bool * matched) {
 	int result = FR_OK;
 	char * expandedAlias;
 	char * command;
@@ -395,6 +397,8 @@ int mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos) {
 	if (alias == NULL) {	// Alias not found or couldn't be read
 		return MOS_NOT_IMPLEMENTED;
 	}
+
+	if (matched) *matched = true;
 
 	expandedAlias = substituteArguments(alias, args, 0);
 	umm_free(alias);
@@ -489,7 +493,7 @@ int mos_exec(char * buffer, BOOL in_mos) {
 			if (cmdLen > 1 && aliasToken[strlen(aliasToken) - 1] == '.') {
 				aliasToken[strlen(aliasToken) - 1] = '*';
 			}
-			result = mos_execAlias(aliasToken, ptr, NULL, in_mos);
+			result = mos_execAlias(aliasToken, ptr, NULL, in_mos, NULL);
 			umm_free(aliasToken);
 			if (result != MOS_NOT_IMPLEMENTED) {
 				return result;	// Alias was found and run so return result
@@ -524,23 +528,58 @@ int mos_exec(char * buffer, BOOL in_mos) {
 				// Command is too short to be a valid command
 				return MOS_INVALID_COMMAND;
 			}
+			if (*(commandPtr + cmdLen - 1) == '.') {
+				// A trailing dot on a command is treated as a wildcard when searching for a matching executable
+				// but if the dot is followed by non-space text it could be a full filename with extension
+				if (commandPtr[cmdLen] != '\0' && commandPtr[cmdLen] != ' ') {
+					if (in_mos) {
+						// try to run as a file first (e.g. cc.obey, foo.bin) before falling back
+						char * runPtr = commandPtr;
+						bool fileMatched = false;
+						if (runPtr > buffer && *(runPtr - 1) == '"') {
+							runPtr--;
+						}
+						result = mos_runOrLoadFile(runPtr, true, &fileMatched);
+						if (fileMatched) {
+							return result;
+						}
+					}
+					if (strncasecmp(commandPtr + cmdLen, "bin", 3) == 0 && (commandPtr[cmdLen + 3] == ' ' || commandPtr[cmdLen + 3] == '\0')) {
+						// .bin extension was explicitly provided but file not found directly
+						// skip past "bin" in ptr to get to the real arguments
+						// and fall through to run-path-based .bin search
+						ptr = mos_trim(commandPtr + cmdLen + 3, false, false);
+					} else {
+						useWildcard = true;
+					}
+				} else {
+					useWildcard = true;
+				}
+				cmdLen--;
+			}
+			// .bin files can be run as commands, without an extension - check for them (does not use runtype)
+			// NB if we detected a potential wildcard then we'll search for `name?*.bin`
+			// to ensure we get a true wildcard match for a binary file
 			path = umm_malloc(cmdLen + 12);
 			if (path == NULL) {
 				// Out of memory, but report it as an invalid command
 				return MOS_INVALID_COMMAND;
 			}
-			if (*(commandPtr + cmdLen - 1) == '.') {
-				// A trailing dot on a command is treated as a wildcard when searching for a matching executable
-				useWildcard = true;
-				cmdLen--;
-			}
-			// .bin files can be run as commands, without an extension - check for them (does not use runtype)
 			if (memchr(commandPtr, ':', cmdLen) != NULL) {
 				// Command has a path prefix, so we use it as-is
-				sprintf(path, "%.*s%s.bin", cmdLen, commandPtr, useWildcard ? "*" : "");
+				// but if not in_mos, only allow moslet path prefix to prevent overwriting user memory
+				if (!in_mos) {
+					char * colon = memchr(commandPtr, ':', cmdLen);
+					int prefixLen = colon - commandPtr;
+					if (prefixLen != 6 || strncasecmp(commandPtr, "moslet", 6) != 0) {
+						umm_free(path);
+						return MOS_INVALID_COMMAND;
+					}
+				}
+				sprintf(path, "%.*s%s.bin", cmdLen, commandPtr, useWildcard ? "?*" : "");
 			} else {
 				// If "in_mos" is true we use full run path, otherwise restrict to moslets only
-				sprintf(path, "%s:%.*s%s.bin", in_mos ? "run" : "moslet", cmdLen, commandPtr, useWildcard ? "*" : "");
+				sprintf(path, "%s:%.*s%s.bin", in_mos ? "run" : "moslet", cmdLen, commandPtr, useWildcard ? "?*" : "");
 			}
 
 			// expand any variables in our arguments, if we can, and run the command
@@ -551,18 +590,6 @@ int mos_exec(char * buffer, BOOL in_mos) {
 			}
 			umm_free(path);
 			if (args) umm_free(args);
-
-			// Try to use RunFile on the CLI value - disabled for OSCLI, and no runpath searching
-			if (result == MOS_INVALID_COMMAND && in_mos) {
-				// reinstate opening double-quote if there was one
-				if (commandPtr > buffer && *(commandPtr - 1) == '"') {
-					commandPtr--;
-				}
-				result = mos_runOrLoadFile(commandPtr, true);
-			}
-			if (result == FR_NO_FILE || result == FR_NO_PATH || result == FR_DISK_ERR) {
-				result = MOS_INVALID_COMMAND;
-			}
 		}
 	}
 	return result;
@@ -1230,7 +1257,7 @@ int mos_cmdJMP(char *ptr) {
 // - MOS error code
 //
 int mos_cmdLOADFILE(char *ptr) {
-	return mos_runOrLoadFile(ptr, false);
+	return mos_runOrLoadFile(ptr, false, NULL);
 }
 
 // RUN [<addr>] [<arguments>] command
@@ -1286,7 +1313,7 @@ int mos_cmdRUNBIN(char *ptr) {
 // - MOS error code
 //
 int mos_cmdRUNFILE(char *ptr) {
-	return mos_runOrLoadFile(ptr, true);
+	return mos_runOrLoadFile(ptr, true, NULL);
 }
 
 // CD <path> command
