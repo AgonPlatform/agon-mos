@@ -2437,12 +2437,15 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 	DIR		dir;
 	char *	resolvedDestPath = NULL;
 	char *	fullSrcPath = NULL;
+	char *	targetPath = NULL;		// Reusable working buffer
 	int		maxLength = 0;
 	int		length = 0;
+	int		targetPathLen = 0;
 	BYTE	index = 0;
 	BOOL	usePattern = FALSE;
 	BOOL	targetIsDir = FALSE;
 	BOOL	addSlash = FALSE;
+	BOOL	destResolved = FALSE;	// Whether resolvedDestPath has been fully resolved to absolute
 
 	if (mos_strcspn(dstPath, "*?") != strlen(dstPath)) {
 		// Destination path cannot include wildcards
@@ -2451,6 +2454,12 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 	// establish whether src has a pattern
 	// NB if target is not a directory only first match will be copied
 	usePattern = mos_strcspn(srcPath, "*?:") != strlen(srcPath);
+
+	// Check source exists before we do anything with the destination
+	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, RESOLVE_OMIT_EXPAND);
+	if (fr != FR_OK) {
+		return fr;
+	}
 
 	fr = getResolvedPath(dstPath, &resolvedDestPath, RESOLVE_OMIT_EXPAND);
 	if (fr != FR_OK && fr != FR_NO_FILE) {
@@ -2468,36 +2477,93 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 		addSlash = dstPath[strlen(dstPath) - 1] != '/';
 	}
 
-	fr = resolvePath(srcPath, NULL, &maxLength, NULL, NULL, RESOLVE_OMIT_EXPAND);
-	if (fr != FR_OK) {
-		// source couldn't be resolved, so no file to move
-		umm_free(resolvedDestPath);
-		return fr;
-	}
+	// Resolve source path - allocate buffer and fill in first match,
+	// opening a DIR for pattern iteration
 	fullSrcPath = umm_malloc(maxLength + 1);
 	if (!fullSrcPath) {
 		umm_free(resolvedDestPath);
 		return MOS_OUT_OF_MEMORY;
 	}
-
 	length = maxLength;
 	fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
 	renResult = fr;
+	if (fr != FR_OK) {
+		umm_free(fullSrcPath);
+		umm_free(resolvedDestPath);
+		return fr;
+	}
+
+	// Allocate targetPath as a working buffer for the rename loop.
+	// It serves two purposes each iteration:
+	//   1. Temp space for resolving source to absolute (descendant check)
+	//   2. Building the final destination path for f_rename
+	// Size must be large enough for both uses.
+	// resolvedDestPath may not yet be absolute, so account for cwd in dstPathLen.
+	{
+		int maxLeafLen = maxLength - (getFilepathLeafname(fullSrcPath) - fullSrcPath);
+		int cwdLen = strlen(cwd);
+		int dstPathLen = strlen(resolvedDestPath) + cwdLen + maxLeafLen + 2;
+		int absSrcLen = maxLength + cwdLen + 2;
+		targetPathLen = dstPathLen > absSrcLen ? dstPathLen : absSrcLen;
+		targetPath = umm_malloc(targetPathLen);
+	}
+	if (!targetPath) {
+		umm_free(fullSrcPath);
+		umm_free(resolvedDestPath);
+		return MOS_OUT_OF_MEMORY;
+	}
 
 	while (fr == FR_OK) {
-		// Build our destination path in fullDstPath
 		char * srcLeafname = getFilepathLeafname(fullSrcPath);
-		int dstLen = strlen(resolvedDestPath) + (targetIsDir ? strlen(srcLeafname) : 0) + 2;
-		char * fullDstPath = umm_malloc(dstLen);
-		if (!fullDstPath) {
-			fr = MOS_OUT_OF_MEMORY;
-			break;
+
+		// Prevent moving a directory into itself or one of its descendants,
+		// which would corrupt the filesystem (orphan blocks, missing source).
+		// Both paths must be absolute for a reliable comparison.
+		// resolvedDestPath is resolved to absolute on first need (and kept that way).
+		if (isDirectory(fullSrcPath)) {
+			int len = targetPathLen;
+			// Resolve destination to absolute if not already done
+			if (!destResolved) {
+				fr = resolveRelativePath(resolvedDestPath, targetPath, &len);
+				if (fr != FR_OK) {
+					renResult = fr;
+					break;
+				}
+				umm_free(resolvedDestPath);
+				resolvedDestPath = mos_strdup(targetPath);
+				if (!resolvedDestPath) {
+					renResult = MOS_OUT_OF_MEMORY;
+					break;	// resolvedDestPath is NULL, safe to free in cleanup
+				}
+				destResolved = TRUE;
+				len = targetPathLen;
+			}
+			// Resolve source to absolute (into targetPath) and compare against
+			// the absolute destination.  If dest starts with src followed by '/'
+			// then dest is a descendant.  If dest matches src exactly and the
+			// destination is a directory, it's a move-into-self.
+			if (resolveRelativePath(fullSrcPath, targetPath, &len) == FR_OK) {
+				int srcPathLen = strlen(targetPath);
+				if (strncasecmp(resolvedDestPath, targetPath, srcPathLen) == 0 &&
+					(resolvedDestPath[srcPathLen] == '/' || (targetIsDir && resolvedDestPath[srcPathLen] == '\0'))) {
+					if (usePattern && targetIsDir) {
+						if (verbose) printf("Skipping %s (destination is inside source)\r\n", fullSrcPath);
+						length = maxLength;
+						fr = resolvePath(srcPath, fullSrcPath, &length, &index, &dir, RESOLVE_OMIT_EXPAND);
+						continue;
+					}
+					renResult = FR_INVALID_PARAMETER;
+					break;
+				}
+			}
 		}
-		sprintf(fullDstPath, "%s%s%s", resolvedDestPath, addSlash ? "/" : "", targetIsDir ? srcLeafname : "");
+
+		// Build destination path in targetPath (overwrites any descendant check data)
+		sprintf(targetPath, "%s%s%s", resolvedDestPath, addSlash ? "/" : "", targetIsDir ? srcLeafname : "");
+
 		// Rename the file
-		if (verbose) printf("Moving %s to %s\r\n", fullSrcPath, fullDstPath);
-		renResult = f_rename(fullSrcPath, fullDstPath);
-		umm_free(fullDstPath);
+		if (verbose) printf("Moving %s to %s\r\n", fullSrcPath, targetPath);
+		renResult = f_rename(fullSrcPath, targetPath);
 		if (renResult != FR_OK) break;
 		if (usePattern && targetIsDir) {
 			// get next matching source, if there is one
@@ -2508,6 +2574,7 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 		}
 	}
 
+	umm_free(targetPath);
 	umm_free(fullSrcPath);
 	umm_free(resolvedDestPath);
 	return renResult;
