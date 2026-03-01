@@ -490,7 +490,7 @@ int mos_exec(char * buffer, BOOL in_mos) {
 			if (aliasToken == NULL) {
 				return MOS_OUT_OF_MEMORY;
 			}
-            if (commandPtr[cmdLen - 1] == '.' && cmdLen > 1) {
+			if (commandPtr[cmdLen - 1] == '.' && cmdLen > 1) {
 				// command ends with a dot which we treat as an abbreviation
 				// use `#*` in the wildcard to ensure matches extend the current term
 				sprintf(aliasToken, "Alias$%.*s#*", cmdLen - 1, commandPtr);
