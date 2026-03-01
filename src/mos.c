@@ -2550,7 +2550,8 @@ UINT24 mos_REN(char *srcPath, char *dstPath, BOOL verbose) {
 			if (resolveRelativePath(fullSrcPath, targetPath, &len) == FR_OK) {
 				int srcPathLen = strlen(targetPath);
 				if (strncasecmp(resolvedDestPath, targetPath, srcPathLen) == 0 &&
-					(resolvedDestPath[srcPathLen] == '/' || (targetIsDir && resolvedDestPath[srcPathLen] == '\0'))) {
+					(resolvedDestPath[srcPathLen] == '/' || targetPath[srcPathLen - 1] == '/' ||
+					 (targetIsDir && resolvedDestPath[srcPathLen] == '\0'))) {
 					if (usePattern && targetIsDir) {
 						if (verbose) printf("Skipping %s (destination is inside source)\r\n", fullSrcPath);
 						length = maxLength;
