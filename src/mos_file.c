@@ -7,7 +7,6 @@
 
 #include "mos_file.h"
 #include "mos_sysvars.h"
-#include "utils.h"
 
 // Check if a path is a directory - path must be resolved
 uint8_t isDirectory(char *path) {
@@ -496,7 +495,8 @@ int copyFile(char * source, char * dest) {
 
 	// Work out the largest sensible/efficient buffer size for copying
 	// taking the largest free size, and rounding to a multiple of 512 (the typical cluster size)
-	uint24_t bufferSize = getLargestFreeHeapFragment();
+	uint24_t bufferSize;
+	umm_heap_stats(NULL, NULL, NULL, &bufferSize);
 	if (bufferSize > 512) {
 		// Round down to a multiple of 512, avoiding zeroing the size
 		bufferSize = bufferSize & 0xfffe00;

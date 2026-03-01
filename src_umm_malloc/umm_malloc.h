@@ -39,6 +39,8 @@ extern void *umm_calloc(UINT24 num, UINT24 size);
 extern void *umm_realloc(void *ptr, UINT24 size);
 extern void  umm_free(void *ptr);
 
+extern void  umm_heap_stats(UINT24 *total, UINT24 *used, UINT24 *free, UINT24 *largest_free);
+
 /* ------------------------------------------------------------------------ */
 
 #ifdef __cplusplus

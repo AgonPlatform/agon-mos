@@ -777,3 +777,40 @@ void *umm_realloc(void *ptr, UINT24 size){
 void umm_free(void *ptr){
     umm_multi_free(&umm_heap_current, ptr);
 }
+
+/* ------------------------------------------------------------------------ */
+
+void umm_heap_stats(UINT24 *total, UINT24 *used, UINT24 *free, UINT24 *largest_free) {
+    umm_heap *heap = &umm_heap_current;
+    UINT16 cf;
+    UINT16 blockSize;
+    UINT16 totalFreeBlocks = 0;
+    UINT16 largestFreeBlocks = 0;
+
+    /* Walk the free list to sum free blocks and find the largest fragment */
+    cf = UMM_NFREE(0);
+    while (cf) {
+        blockSize = (UMM_NBLOCK(cf) & UMM_BLOCKNO_MASK) - cf;
+        totalFreeBlocks += blockSize;
+        if (blockSize > largestFreeBlocks) {
+            largestFreeBlocks = blockSize;
+        }
+        cf = UMM_NFREE(cf);
+    }
+
+    if (total) {
+        *total = UMM_HEAPSIZE;
+    }
+    if (free) {
+        *free = (UINT24)totalFreeBlocks * UMM_BLOCKSIZE;
+    }
+    if (used) {
+        *used = (UINT24)(UMM_NUMBLOCKS - totalFreeBlocks) * UMM_BLOCKSIZE;
+    }
+    if (largest_free) {
+        /* Largest allocatable size: block capacity minus one header */
+        *largest_free = largestFreeBlocks > 0
+            ? (UINT24)largestFreeBlocks * UMM_BLOCKSIZE - sizeof(umm_ptr)
+            : 0;
+    }
+}
