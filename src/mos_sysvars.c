@@ -120,14 +120,20 @@ int updateSystemVariable(t_mosSystemVariable * var, MOSVARTYPE type, void * valu
 
 	var->type = type;
 	if (type == MOS_VAR_MACRO || type == MOS_VAR_STRING) {
-		char * newValue = mos_strdup(value);
-		if (newValue == NULL) {
-			return MOS_OUT_OF_MEMORY;
-		}
+		int len = strlen(value) + 1;
 		if (oldType == MOS_VAR_MACRO || oldType == MOS_VAR_STRING) {
-			umm_free(var->value);
+			char * newValue = umm_realloc(var->value, len);
+			if (newValue == NULL) {
+				return MOS_OUT_OF_MEMORY;
+			}
+			var->value = newValue;
+		} else {
+			var->value = umm_malloc(len);
+			if (var->value == NULL) {
+				return MOS_OUT_OF_MEMORY;
+			}
 		}
-		var->value = newValue;
+		strcpy(var->value, value);
 	} else {
 		if (oldType == MOS_VAR_MACRO || oldType == MOS_VAR_STRING) {
 			umm_free(var->value);
