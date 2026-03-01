@@ -22,6 +22,7 @@
 #define MATCH_COMMANDS_AUTO			MATCH_CASE_INSENSITIVE | MATCH_DOT_AS_STAR | MATCH_DISABLE_HASH | MATCH_DISABLE_STAR
 
 int strcasecmp(const char *s1, const char *s2);
+int strncasecmp(const char *s1, const char *s2, size_t n);
 
 char * stristr(const char * str, const char * substr);
 
