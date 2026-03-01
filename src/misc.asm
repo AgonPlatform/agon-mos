@@ -133,6 +133,8 @@ _exec24:		PUSH 	IY
 			PUSH	IX
 			LD	A, MB 		; Preserve the MBASE register
 			PUSH	AF 
+			XOR	A
+			LD	MB, A		; Clear MBASE so API calls from this ADL binary don't identify process as Z80-mode
 			LD	DE, (IY+6)	; Get the address
 			LD	A, (IY+8)	; And the high byte for the code segment
 			LD	HL, (IY+9)	; Load HLU with the pointer to the params

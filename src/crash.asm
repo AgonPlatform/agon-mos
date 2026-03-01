@@ -120,7 +120,11 @@ $$:	pop af
 	pop hl
 	pop ix
 	pop iy
-	ret.lil
+	; ret, not ret.lil, because we assume accidental entry to
+	; rst38 from ADL code. so rst.lil was not used, just rst
+	; Also allows rst38 handler to be used for stepping through
+	; code, with rst 0x38 as a breakpoint
+	ret
 
 print_hex8:
 	push af
