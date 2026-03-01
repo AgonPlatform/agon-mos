@@ -396,11 +396,13 @@ int resolveRelativePath(char * path, char * resolved, int * length) {
 	leafChar = *leafname;
 	if (leafname == path) {
 		// only have a leafname, so just return cwd + leafname
-		if (*length >= strlen(path) + strlen(cwd) + 1) {
+		int cwdLen = strlen(cwd);
+		BOOL cwdHasSlash = cwdLen > 0 && cwd[cwdLen - 1] == '/';
+		if (*length >= strlen(path) + cwdLen + (cwdHasSlash ? 1 : 2)) {
 			if (leafChar == '\0') {
 				sprintf(resolved, "%s", cwd);
 			} else {
-				sprintf(resolved, "%s/%s", cwd, path);
+				sprintf(resolved, "%s%s%s", cwd, cwdHasSlash ? "" : "/", path);
 			}
 			return FR_OK;
 		} else {
