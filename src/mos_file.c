@@ -156,6 +156,7 @@ int getLengthForResolvedPath(char * filepath, int * length, BYTE * index, BYTE f
 		}
 		pathResult = getDirectoryForPath(filepath, searchPath, &basePathLength, prefixIndex);
 		if (pathResult != FR_OK) {
+			umm_free(searchPath);
 			break;
 		}
 

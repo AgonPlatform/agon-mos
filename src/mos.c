@@ -293,6 +293,7 @@ int mos_runBinFile(char * filepath, char * args) {
 	createOrUpdateSystemVariable("LastBin$RunPath", MOS_VAR_STRING, filepath);
 	#endif /* DEBUG */
 	if (result != FR_OK) {
+		umm_free(resolvedPath);
 		return result;
 	}
 
@@ -350,6 +351,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 	createOrUpdateSystemVariable(run ? "LastFile$RunPath" : "LastFile$LoadPath", MOS_VAR_STRING, filepath);
 	#endif /* DEBUG */
 	if (result != FR_OK) {
+		umm_free(resolvedPath);
 		return result;
 	}
 
@@ -371,6 +373,7 @@ int mos_runOrLoadFile(char * ptr, bool run) {
 			extension++;
 			sprintf(token, "Alias$@%sType_%s", run ? "Run" : "Load", extension);
 			result = mos_execAlias(token, ptr, run ? "LastFile$Run" : "LastFile$Load", true);
+			umm_free(token);
 			if (result == MOS_NOT_IMPLEMENTED) {
 				result = MOS_INVALID_COMMAND;
 			}
@@ -393,8 +396,8 @@ int mos_execAlias(char * token, char * args, char * saveToken, BOOL in_mos) {
 	}
 
 	expandedAlias = substituteArguments(alias, args, 0);
+	umm_free(alias);
 	if (!expandedAlias) {
-		umm_free(alias);
 		return FR_INT_ERR;
 	}
 	if (saveToken != NULL) {	// Save the alias for later use/debugging
@@ -678,9 +681,7 @@ int mos_cmdECHO(char *ptr) {
 	while (transInfo != NULL) {
 		result = gsRead(&transInfo, &read);
 		if (result != FR_OK) {
-			if (transInfo != NULL) {
-				umm_free(transInfo);
-			}
+			gsDispose(&transInfo);
 			return result;
 		}
 		if (transInfo == NULL) {
@@ -1870,6 +1871,7 @@ UINT24 mos_LOAD(char * filename, UINT24 address, UINT24 size) {
 	FRESULT	fr = getResolvedPath(filename, &expandedFilename, RESOLVE_OMIT_EXPAND);
 	
 	if (fr != FR_OK) {
+		umm_free(expandedFilename);
 		return fr;
 	}
 
