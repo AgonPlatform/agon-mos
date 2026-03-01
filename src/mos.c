@@ -55,6 +55,7 @@
 #include "umm_malloc.h"
 #include "mos_sysvars.h"
 #include "mos_file.h"
+#include "utils.h"
 #if DEBUG > 0
 # include "tests.h"
 #endif /* DEBUG */
@@ -1634,7 +1635,7 @@ extern void sysvars[];
 // - MOS error code
 //
 int mos_cmdMEM(char * ptr) {
-	int try_len = HEAP_LEN;
+	uint24_t try_len = getLargestFreeHeapFragment();
 
 	printf("ROM      &000000-&01ffff     %2d%% used\r\n", ((int)_low_romdata) / 1311);
 	printf("USER:LO  &%06x-&%06x %6d bytes\r\n", 0x40000, (int)_low_data-1, (int)_low_data - 0x40000);
@@ -1644,16 +1645,6 @@ int mos_cmdMEM(char * ptr) {
 	printf("STACK24  &%06x-&%06x %6d bytes\r\n", (int)_stack - SPL_STACK_SIZE, _stack-1, SPL_STACK_SIZE);
 	printf("USER:HI  &b7e000-&b7ffff   8192 bytes\r\n");
 	printf("\r\n");
-
-	// find largest kmalloc contiguous region
-	for (; try_len > 0; try_len-=8) {
-		void *p = umm_malloc(try_len);
-		if (p) {
-			umm_free(p);
-			break;
-		}
-	}
-
 	printf("Largest free MOS:HEAP fragment: %d bytes\r\n", try_len);
 	printf("Sysvars at &%06x\r\n", sysvars);
 	printf("\r\n");
