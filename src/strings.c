@@ -150,7 +150,7 @@ int pmatch(const char *pattern, const char *string, uint8_t flags) {
 		char patternChar = caseInsensitive ? tolower(*pattern) : *pattern;
 		char stringChar = caseInsensitive ? tolower(*string) : *string;
 
-		if ((*pattern == '#' && !disableHash) || patternChar == stringChar) {
+		if ((!disableHash && *pattern == '#' && *string != '\0') || patternChar == stringChar) {
 			return pmatch(pattern + 1, string + 1, flags);
 		}
 

@@ -483,15 +483,19 @@ int mos_exec(char * buffer, BOOL in_mos) {
 			// Skip alias expansion for commands that start with %
 			commandPtr++;
 			cmdLen--;
-		} else {
+		} else if (memchr(commandPtr, '*', cmdLen) == NULL && memchr(commandPtr, '#', cmdLen) == NULL) {
 			// Check if this command has an alias
-			char * aliasToken = umm_malloc(cmdLen + 7);
+			// Skips commands containing `*` or `#` as they aren't valid command characters
+			char * aliasToken = umm_malloc(cmdLen + 8);
 			if (aliasToken == NULL) {
 				return MOS_OUT_OF_MEMORY;
 			}
-			sprintf(aliasToken, "Alias$%.*s", cmdLen, commandPtr);
-			if (cmdLen > 1 && aliasToken[strlen(aliasToken) - 1] == '.') {
-				aliasToken[strlen(aliasToken) - 1] = '*';
+            if (commandPtr[cmdLen - 1] == '.' && cmdLen > 1) {
+				// command ends with a dot which we treat as an abbreviation
+				// use `#*` in the wildcard to ensure matches extend the current term
+				sprintf(aliasToken, "Alias$%.*s#*", cmdLen - 1, commandPtr);
+			} else {
+				sprintf(aliasToken, "Alias$%.*s", cmdLen, commandPtr);
 			}
 			result = mos_execAlias(aliasToken, ptr, NULL, in_mos, NULL);
 			umm_free(aliasToken);

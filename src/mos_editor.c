@@ -332,7 +332,7 @@ BYTE handleHotkey(UINT8 fkey, char * buffer, int bufferLength, int insertPos, in
 
 // Find the start of a term in the buffer
 //
-const char * findTermStart(char * buffer, int insertPos, UINT16 flags) {
+const char * findTermStart(char * buffer, int insertPos, UINT16 flags, int * termLength) {
 	// flags potentially allow us to change behaviour
 	// for now we are hard-coded for the CLI, so first we skip leading `*` and ` ` characters
 	char * termPtr;
@@ -360,6 +360,13 @@ const char * findTermStart(char * buffer, int insertPos, UINT16 flags) {
 	}
 	if (*termPtr == 0) {
 		// No term found
+		return NULL;
+	}
+
+	// Compute term length and reject terms containing '*' wildcard,
+	// as the insertString offset logic cannot handle wildcard terms
+	*termLength = buffer + insertPos - termPtr;
+	if (memchr(termPtr, '*', *termLength) != NULL) {
 		return NULL;
 	}
 
@@ -521,13 +528,12 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 								int termLength = 0;
 								int resolveLength;
 
-								termStart = findTermStart(buffer, insertPos, flags);
+								termStart = findTermStart(buffer, insertPos, flags, &termLength);
 								if (termStart == NULL) {
 									// no term found, so beep and exit
 									putch(0x07); // Beep
 									break;
 								}
-								termLength = buffer + insertPos - termStart;
 
 								// our term is from termStart to buffer + insertPos
 								// if the term had a leading double-quote, that is one character _before_ termStart
@@ -548,11 +554,16 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 										break;
 									}
 
-									sprintf(searchTerm, "Alias$%.*s*", termLength, termStart);
-									if (getSystemVariable(searchTerm, &var) == 0) {
-										// Matching alias found
-										matched = true;
-										insertPos = insertString(buffer, var->label + 6, strlen(var->label + 6), termLength, insertPos, len, limit, ' ');
+									// Alias matching here uses plain `*` wildcard to allow auto-complete to recognise current term
+									// is complete and just add a space
+									// Skip alias lookup if term contains '#' as it would be treated as a wildcard by pmatch
+									if (memchr(termStart, '#', termLength) == NULL) {
+										sprintf(searchTerm, "Alias$%.*s*", termLength, termStart);
+										if (getSystemVariable(searchTerm, &var) == 0) {
+											// Matching alias found
+											matched = true;
+											insertPos = insertString(buffer, var->label + 6, strlen(var->label + 6), termLength, insertPos, len, limit, ' ');
+										}
 									}
 
 									if (!matched) {
@@ -569,6 +580,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 									if (!matched) {
 										// Find command in runpath, or given path - omitting hidden/system files
 										// TODO think more on this `:` detection once we support runtypes
+										// Wildcard is a plain `*` to allow current term to be recognised as complete
 										if (memchr(termStart, ':' , termLength) != NULL) {
 											sprintf(searchTerm, "%.*s*.bin", termLength, termStart);
 										} else {
@@ -599,6 +611,7 @@ UINT24 mos_EDITLINE(char * buffer, int bufferLength, UINT16 flags) {
 								}
 
 								sprintf(searchTerm, "%.*s*", termLength, termStart);
+
 								resolveLength = bufferLength;
 								// Find file, omitting hidden/system files
 								fr = resolvePath(searchTerm, path, &resolveLength, NULL, NULL, AM_HID | AM_SYS | RESOLVE_OMIT_EXPAND);

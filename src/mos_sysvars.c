@@ -1027,19 +1027,10 @@ char * expandVariable(t_mosSystemVariable * var, bool showWriteOnly) {
 }
 
 // expandVariableToken is used for internal variable expansion
-// if it's given a token ending in a wildcard then it's been used to match an abbreviated command
-// so we need to ensure that we _don't_ match to variables with names that only match the non-wildcard part of the token
 char * expandVariableToken(char * token) {
 	t_mosSystemVariable * var = NULL;
-	int tokenLen = strlen(token);
 	int result = getSystemVariable(token, &var);
 	if (result != 0) {
-		return NULL;
-	}
-	// if the token ends in a `*` then it's an abbreviation
-	// and we should reject variables whose names are shorter than the token
-	// as they would have only matched the non-wildcard part of the token
-	if ((token[tokenLen - 1] == '*') && (strlen(var->label) < tokenLen)) {
 		return NULL;
 	}
 	return expandVariable(var, false);
