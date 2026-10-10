@@ -2273,7 +2273,7 @@ sd_api_writeblocks:	LD	A, MB		; A: MB
 $$:			PUSH	BC		; WORD count
 			PUSH	DE		; BYTE * buf
 			PUSH	HL		; DWORD * addr
-			CALL	_SD_readBlocks_API
+			CALL	_SD_writeBlocks_API
 			POP	HL
 			POP	DE
 			POP	BC
