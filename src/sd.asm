@@ -387,18 +387,17 @@ $gotit1:	TIMER_RESET	0		; (clobbers just A)
 
 $loop2:		CALL		_spi_read_one
 		CP		A,%00
-		JR		NZ,$gotit2
+		JR		NZ,$notgot
 
 		; Continue until the timer expires
 		TIMER_EXP?	0
 		JR		NC,$loop2
 
-		; Timeout, skip over setting token
-		JR		$notgot
-
-$gotit2:	; Success: set token to 0x00
-		XOR		A,A
-		LD		A,(IX-1)
+		; Completion timed out: accepted data is not completed data.
+		; Invalidate the token so _SD_writeBlocks reports SD_ERROR.
+		LD		A,SD_ERROR_TOKEN
+		LD		(IX-1),A
+		NOP			; Keep the 3.0.2 instruction window size unchanged.
 
 $notgot:	; Reset the timer
 		TIMER_RESET	0
