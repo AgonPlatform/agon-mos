@@ -8,6 +8,9 @@
 
 section .text
 __init:
+		xor a
+		ld mb,a
+
 		ld a, 0xFF
 		out0 (PB_DDR), a         ; GPIO
 		out0 (PC_DDR), a         ;
@@ -94,6 +97,8 @@ __init:
 		; Setup Stack Pointer
 		; (Temporary stack for init only - in on-chip sram)
 		ld sp, 0xb80000
+		; Clear SPS
+		ld.s sp,0
 
 		; Detect preserved ram
 		ld hl, (_warmboot_magic)
