@@ -116,6 +116,10 @@ mos_waitforvdpflags:	EQU	41h
 ;
 mos_getfunction:	EQU	50h
 
+; New APIs incorporated from Rainbow MOS
+;
+mos_api_setresetvector:	EQU	61h
+
 ; Low-level SD card functions
 ;
 sd_getunlockcode:	EQU	70h

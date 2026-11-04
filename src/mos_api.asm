@@ -259,8 +259,9 @@ mos_api_block1_start:	DW	mos_api_getkey		; 0x00
 			DW	mos_api_not_implemented	; 0x5e
 			DW	mos_api_not_implemented	; 0x5f
 
+			; 0x60-0x6f - Rainbox MOS experiments
 			DW	mos_api_not_implemented	; 0x60
-			DW	mos_api_not_implemented	; 0x61
+			DW	mos_api_setresetvector  ; 0x61
 			DW	mos_api_not_implemented	; 0x62
 			DW	mos_api_not_implemented	; 0x63
 			DW	mos_api_not_implemented	; 0x64
@@ -825,6 +826,40 @@ mos_api_setintvector:	LD	A, E
 			POP	DE
 			RET
 
+; Set a reset vector
+; HLU: Pointer to the interrupt vector (24-bit pointer)
+;   E: Vector # to set (valid values: 0x8, 0x10, 0x18, ..., 0x38)
+; Returns:
+; HLU: Pointer to the previous vector
+; A: zero on success (always - to differentiate from 'not implemented')
+mos_api_setresetvector:
+			PUSH	BC
+			PUSH	DE
+
+			PUSH	HL
+			LD	A, E
+
+			; A = (E-8)>>1 + 1
+			SUB	8
+			OR	A	; Clear carry flag
+			RRA
+			INC	A	; Skip 'jp' instruction
+
+			LD	DE,0
+			LD	E,A
+			LD	HL,ram_rst_08_handler
+			ADD	HL,DE
+			LD	DE,(HL)	; Load old vector
+			POP	BC	; New vector
+
+			LD	(HL),BC	; Store new vector
+			EX	DE,HL	; Old vec to HL
+
+			POP	DE
+			POP	BC
+			XOR	A
+			RET
+			
 ; Set a VDP keyboard packet receiver callback
 ;   C: If non-zero then set the top byte of HLU(callback address)  to MB (for ADL=0 callers)
 ; HLU: Pointer to callback
