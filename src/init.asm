@@ -127,9 +127,6 @@ __init:
 		dec a			; Otherwise set to 0
 	1:	push af 		; Stack AF, will store later as __c_startup clears globals area
 
-		; Initialize the interrupt vector table
-		call __init_default_vectors
-
 		; Set rising edge triggered interrupt for vblank GPIO
 		ld	a, GPIOMODE_INTRE
 		ld	b, 2
@@ -147,6 +144,9 @@ __init:
 		ld bc, ___bss_len - 1
 		ld (hl), 0
 		call ldir_handle_zerolen
+
+		; The RAM interrupt jump table is in BSS: initialize it after clearing.
+		call __init_default_vectors
 
 		pop af			; Pop the hardReset value
 		ld (_hardReset), a	; And store
