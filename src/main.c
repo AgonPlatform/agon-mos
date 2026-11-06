@@ -29,12 +29,11 @@
  * 11/11/2023:				RC3	+ See Github for full list of changes
  */
 
-#include <eZ80.h>
-#include <defines.h>
+#include "ez80f92.h"
+#include "defines.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <CTYPE.h>
-#include <String.h>
+#include <string.h>
 
 #include "defines.h"
 #include "version.h"
@@ -50,7 +49,7 @@
 #include "i2c.h"
 #include "umm_malloc.h"
 
-extern BYTE scrcolours, scrpixelIndex;	// In globals.asm
+extern volatile BYTE scrcolours, scrpixelIndex;  // In globals.asm
 
 extern void *	set_vector(unsigned int vector, void(*handler)(void));
 
@@ -58,7 +57,7 @@ extern void 	vblank_handler(void);
 extern void 	uart0_handler(void);
 extern void 	i2c_handler(void);
 
-extern char 			coldBoot;		// 1 = cold boot, 0 = warm boot
+extern char hardReset;		// 1 = hard cpu reset, 0 = soft reset
 extern volatile	char 	keycode;		// Keycode 
 extern volatile char	gp;				// General poll variable
 extern volatile BYTE	keymods;		// Key modifiers
@@ -88,7 +87,7 @@ void wait_ESP32(UART * pUART, UINT24 baudRate) {
 	init_timer0(10, 16, 0x00);			// 10ms timer for delay
 
 	gp = 0;
-	while (gp == 0) {					// Wait for the ESP32 to respond with a GP packet
+	while (gp==0) {					// Wait for the ESP32 to respond with a GP packet	  
 		putch(23);						// Send a general poll packet
 		putch(0);
 		putch(VDP_gp);
@@ -99,7 +98,6 @@ void wait_ESP32(UART * pUART, UINT24 baudRate) {
 		}
 	}
 	enable_timer0(0);					// Disable the timer
-
 	// Set feature flag for full-duplex, flag 0x0101, non-zero 16-bit value
 	putch(23);
 	putch(0);
@@ -169,36 +167,32 @@ bool shiftPressed() {
 	return keydown && (keymods & 0x02);		// Shift indicator is keymods bit 1
 }
 
-//extern UINT24 bottom;
-extern void _heapbot[];
 
 // The main loop
 //
 int main(void) {
-	UART 	pUART0;
+        UART	pUART0;
 
-	DI();											// Ensure interrupts are disabled before we do anything
+	asm volatile("di");
 	init_interrupts();								// Initialise the interrupt vectors
 	init_rtc();										// Initialise the real time clock
 	init_spi();										// Initialise SPI comms for the SD card interface
 	init_UART0();									// Initialise UART0 for the ESP32 interface
 	init_UART1();									// Initialise UART1
-	EI();											// Enable the interrupts now
+	asm volatile("ei");
 	
 	wait_ESP32(&pUART0, 1152000);					// Connect to VDP at maximum rate
 
-	if (coldBoot == 0) {							// If a warm boot detected then
-		putch(12);									// Clear the screen
+	if (hardReset == 0) {							// If a warm boot detected then
+	  putch(12);									// Clear the screen
 	}
-
-	umm_init_heap((void*)_heapbot, HEAP_LEN);
-
+	umm_init_heap((void*)__heapbot, HEAP_LEN);
 	scrcolours = 0;
 	scrpixelIndex = 255;
 	getModeInformation();
 	while (scrcolours == 0) { }
 	readPalette(128, TRUE);
-
+	
 	if (scrpixelIndex < 128) {
 		vdpSupportsTextPalette = TRUE;
 	} else {
